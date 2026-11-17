@@ -11,7 +11,7 @@ echo.
 python --version > nul 2>&1
 if errorlevel 1 goto NO_PYTHON
 
-python -c "import PIL" > nul 2>&1
+python -c "import PIL, numpy" > nul 2>&1
 if errorlevel 1 goto INSTALL_DEPS
 
 :START_APP

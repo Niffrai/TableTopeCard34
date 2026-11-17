@@ -19,7 +19,7 @@ if errorlevel 1 goto INSTALL_ERROR
 
 echo.
 echo [2/2] Проверка работоспособности установленных модулей...
-python -c "import PIL; from PIL import Image; print('[OK] Библиотека Pillow успешно загружена!')"
+python -c "import PIL, numpy; from PIL import Image; print('[OK] Библиотеки Pillow и NumPy успешно загружены!')"
 if errorlevel 1 goto IMPORT_ERROR
 
 echo.
