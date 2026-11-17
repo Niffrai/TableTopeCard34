@@ -416,24 +416,56 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Папки
-  const triggerOpenFolder = async () => {
+  // --- УПРАВЛЕНИЕ КНОПКАМИ ОТКРЫТИЯ ПАПОК ---
+  async function handleOpenFolderAction(btn, endpoint) {
+    if (!btn) return;
+    const origHtml = btn.innerHTML;
     try {
-      await fetch("/api/open-folder", { method: "POST" });
+      btn.disabled = true;
+      btn.innerHTML = `<span style="opacity:0.75">Открытие...</span>`;
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (data.success) {
+        btn.innerHTML = `<span>Папка открыта</span>`;
+        if (data.path && navigator.clipboard) {
+          try {
+            await navigator.clipboard.writeText(data.path);
+          } catch (_) {}
+        }
+        setTimeout(() => {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }, 1600);
+      } else {
+        alert("Не удалось открыть папку:\n" + (data.error || "Неизвестная ошибка") + (data.path ? `\n\nПуть: ${data.path}` : ""));
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+      }
     } catch (err) {
-      alert("Не удалось открыть папку: " + err.message);
+      alert("Ошибка запроса при открытии папки: " + err.message);
+      btn.innerHTML = origHtml;
+      btn.disabled = false;
     }
-  };
-  btnOpenFolder.addEventListener("click", triggerOpenFolder);
-  btnOpenResFolder.addEventListener("click", triggerOpenFolder);
+  }
+
+  if (btnOpenFolder) {
+    btnOpenFolder.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenFolder, "/api/open-project-folder");
+    });
+  }
+
+  if (btnOpenResFolder) {
+    btnOpenResFolder.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenResFolder, "/api/open-res-folder");
+    });
+  }
 
   if (btnOpenPhotos) {
-    btnOpenPhotos.addEventListener("click", async () => {
-      try {
-        await fetch("/api/open-photos-folder", { method: "POST" });
-      } catch (err) {
-        alert("Не удалось открыть папку с фото: " + err.message);
-      }
+    btnOpenPhotos.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenPhotos, "/api/open-photos-folder");
     });
   }
 
@@ -647,12 +679,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnRefreshDecks) btnRefreshDecks.addEventListener("click", loadInstalledDecks);
 
   if (btnOpenTtsDir) {
-    btnOpenTtsDir.addEventListener("click", async () => {
-      try {
-        await fetch("/api/open-tts-folder", { method: "POST" });
-      } catch (e) {
-        alert("Не удалось открыть папку: " + e.message);
-      }
+    btnOpenTtsDir.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenTtsDir, "/api/open-tts-folder");
     });
   }
 

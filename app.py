@@ -136,12 +136,22 @@ def generation_worker(params: dict):
 
 def open_folder(path: str):
     """Кроссплатформенное открытие папки в проводнике / файловом менеджере."""
+    abs_path = os.path.normpath(os.path.abspath(path))
+    if not os.path.exists(abs_path):
+        os.makedirs(abs_path, exist_ok=True)
     if sys.platform.startswith("win"):
-        os.startfile(path)
+        try:
+            # Запуск explorer.exe с абсолютным путем
+            subprocess.Popen(f'explorer.exe "{abs_path}"', shell=True)
+        except Exception:
+            try:
+                subprocess.Popen(["explorer.exe", abs_path])
+            except Exception:
+                os.startfile(abs_path)
     elif sys.platform.startswith("darwin"):
-        subprocess.Popen(["open", path])
+        subprocess.Popen(["open", abs_path])
     else:
-        subprocess.Popen(["xdg-open", path])
+        subprocess.Popen(["xdg-open", abs_path])
 
 
 def find_tts_saves_dir() -> Path | None:
@@ -543,22 +553,33 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": True, "message": "Остановка запрошена"})
             return
 
-        if url_path == "/api/open-folder":
+        if url_path in ("/api/open-folder", "/api/open-res-folder"):
             try:
-                open_folder(OUTPUT_DIR)
-                self._send_json({"success": True})
+                abs_p = os.path.normpath(os.path.abspath(OUTPUT_DIR))
+                open_folder(abs_p)
+                self._send_json({"success": True, "path": abs_p})
             except Exception as e:
-                self._send_json({"success": False, "error": str(e)}, 500)
+                self._send_json({"success": False, "error": str(e), "path": OUTPUT_DIR}, 500)
+            return
+
+        if url_path == "/api/open-project-folder":
+            try:
+                abs_p = os.path.normpath(os.path.abspath(BASE_DIR))
+                open_folder(abs_p)
+                self._send_json({"success": True, "path": abs_p})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e), "path": BASE_DIR}, 500)
             return
 
         if url_path == "/api/open-photos-folder":
             try:
                 photos_dir = os.path.join(OUTPUT_DIR, "photos")
-                os.makedirs(photos_dir, exist_ok=True)
-                open_folder(photos_dir)
-                self._send_json({"success": True})
+                abs_p = os.path.normpath(os.path.abspath(photos_dir))
+                os.makedirs(abs_p, exist_ok=True)
+                open_folder(abs_p)
+                self._send_json({"success": True, "path": abs_p})
             except Exception as e:
-                self._send_json({"success": False, "error": str(e)}, 500)
+                self._send_json({"success": False, "error": str(e), "path": OUTPUT_DIR}, 500)
             return
 
         if url_path == "/api/clear-history":
@@ -917,12 +938,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             saves_dir = find_tts_saves_dir()
             if saves_dir and saves_dir.exists():
                 try:
-                    open_folder(str(saves_dir))
-                    self._send_json({"success": True})
+                    abs_p = os.path.normpath(os.path.abspath(str(saves_dir)))
+                    open_folder(abs_p)
+                    self._send_json({"success": True, "path": abs_p})
                 except Exception as e:
-                    self._send_json({"success": False, "error": str(e)}, 500)
+                    self._send_json({"success": False, "error": str(e), "path": str(saves_dir)}, 500)
             else:
-                self._send_json({"success": False, "error": "Папка Saves не найдена"}, 404)
+                self._send_json({"success": False, "error": "Папка сохранений Tabletop Simulator не найдена на компьютере"}, 404)
             return
 
         self.send_error(404, "Not Found")
