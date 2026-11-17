@@ -29,7 +29,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSaveObject = document.getElementById("btn-save-object");
   const btnClearLogs = document.getElementById("btn-clear-logs");
   const btnClearHistory = document.getElementById("btn-clear-history");
-  const historyBadge = document.getElementById("history-badge");
+  const historyCount = document.getElementById("history-count");
   const btnExportZip = document.getElementById("btn-export-zip");
   const btnImportZip = document.getElementById("btn-import-zip");
   const friendZipInput = document.getElementById("friend-zip-input");
@@ -658,8 +658,9 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const res = await fetch("/api/history-stats");
       const data = await res.json();
-      if (historyBadge) {
-        historyBadge.textContent = `🧠 В истории: ${data.total_cards_tracked || 0} карт`;
+      const countEl = document.getElementById("history-count");
+      if (countEl) {
+        countEl.textContent = data.total_cards_tracked || 0;
       }
     } catch (e) {
       console.warn(e);
@@ -668,15 +669,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnClearHistory) {
     btnClearHistory.addEventListener("click", async () => {
-      if (!confirm("Сбросить историю скачанных карточек? После этого ранее скачанные арты смогут снова попадаться в новых генерациях.")) {
+      const countEl = document.getElementById("history-count");
+      const currentCount = countEl ? countEl.textContent.trim() : "0";
+      if (!confirm(`Очистить базу history.json (${currentCount} запомненных карт)?\n\nПосле очистки ранее скачанные арты снова смогут попадаться в новых генерациях.`)) {
         return;
       }
       try {
-        await fetch("/api/clear-history", { method: "POST" });
-        alert("История успешно очищена! Теперь можно генерировать карты заново с чистого листа.");
-        updateHistoryStats();
+        btnClearHistory.disabled = true;
+        const res = await fetch("/api/clear-history", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          await updateHistoryStats();
+        } else {
+          alert("Не удалось очистить историю: " + (data.error || "Неизвестная ошибка"));
+        }
       } catch (e) {
         alert("Ошибка: " + e.message);
+      } finally {
+        btnClearHistory.disabled = false;
       }
     });
   }

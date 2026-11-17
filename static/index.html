@@ -21,11 +21,15 @@
         </div>
       </div>
       <div class="header-actions">
-        <span id="history-badge" class="badge badge-subtle" title="Количество запомненных карт в базе истории (они больше не повторятся)">🧠 В истории: 0 карт</span>
+        <div class="history-chip-group" title="Количество запомненных карт в базе history.json (они исключаются из новых колод)">
+          <span class="history-badge">🧠 В истории: <strong id="history-count">0</strong> карт</span>
+          <button type="button" id="btn-clear-history" class="btn-clear-history-pill" title="Очистить базу history.json">
+            🗑️ Очистить
+          </button>
+        </div>
         <input type="file" id="friend-zip-input" accept=".zip" class="hidden">
         <button id="btn-import-zip" class="btn btn-primary btn-sm" title="Импортировать ZIP-архив с колодой от друга">📥 Импортировать от друга</button>
         <button id="btn-show-guide" class="btn btn-ghost btn-sm" title="Инструкция: как передать колоду другу">❓ Подсказка для друга</button>
-        <button id="btn-clear-history" class="btn btn-ghost btn-sm" title="Сбросить историю скачанных карт">🔄 Сбросить историю</button>
         <button id="btn-open-folder" class="btn btn-secondary btn-sm" title="Открыть папку с файлами проекта">📁 Папка проекта</button>
       </div>
     </header>

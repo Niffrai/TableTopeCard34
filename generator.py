@@ -408,8 +408,12 @@ class DeckGenerator:
                     print(f"Ошибка удаления старого листа {f}: {e}")
 
     def get_history_stats(self) -> dict:
+        tracked_count = max(
+            len(self.history.get("seen_content_md5s", set())),
+            len(self.history.get("seen_post_ids", set()))
+        )
         return {
-            "total_cards_tracked": len(self.history["seen_content_md5s"])
+            "total_cards_tracked": tracked_count
         }
 
     def _http_get_json(self, url: str, params: dict) -> tuple[list | dict | str, int]:
