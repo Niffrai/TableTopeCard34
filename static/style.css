@@ -308,6 +308,78 @@ input[type="range"] {
   margin-bottom: 0 !important;
 }
 
+/* Interactive Shield Toggle Buttons */
+.shield-badges-container {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.shield-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.shield-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.shield-btn.active {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.12);
+}
+
+.shield-btn.active .shield-badge {
+  background: rgba(16, 185, 129, 0.22);
+  color: #a7f3d0;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.shield-btn:not(.active) {
+  opacity: 0.7;
+  border-style: dashed;
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #fcd34d;
+  background: rgba(245, 158, 11, 0.04);
+}
+
+.shield-btn:not(.active) .shield-badge {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.shield-btn:not(.active):hover {
+  opacity: 1;
+  border-color: rgba(245, 158, 11, 0.7);
+}
+
+.shield-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  transition: all 0.2s ease;
+}
+
 /* Info Tooltip Button (i) */
 .info-btn {
   display: inline-flex;

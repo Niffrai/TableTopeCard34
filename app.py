@@ -88,6 +88,14 @@ def generation_worker(params: dict):
         rule34_api_key = params.get("rule34_api_key", "")
         threads = int(params.get("threads", 8))
 
+        filter_shock = params.get("filter_shock_content", True)
+        if isinstance(filter_shock, str):
+            filter_shock = filter_shock.lower() in ("true", "1", "yes")
+
+        filter_fetishes = params.get("filter_weird_fetishes", True)
+        if isinstance(filter_fetishes, str):
+            filter_fetishes = filter_fetishes.lower() in ("true", "1", "yes")
+
         res = generator.generate_deck(
             positive_tags=pos_tags,
             negative_tags=neg_tags,
@@ -102,7 +110,9 @@ def generation_worker(params: dict):
             rule34_user_id=rule34_user_id,
             rule34_api_key=rule34_api_key,
             threads=threads,
-            progress_callback=on_progress
+            progress_callback=on_progress,
+            filter_shock_content=filter_shock,
+            filter_weird_fetishes=filter_fetishes
         )
 
         if res.get("success"):

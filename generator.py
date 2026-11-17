@@ -249,11 +249,11 @@ def create_dark_anime_skybox(output_path: str):
     final_img.save(output_path, "JPEG", quality=92)
 
 
-def is_disgusting_post_tag(tag: str) -> bool:
-    """Проверяет тег на принадлежность к отвратительному контенту (гуро, насилие, копро, беременность и т.д.)."""
+def is_shock_content_tag(tag: str) -> bool:
+    """Проверяет тег на шок-контент (гуро, расчленение, насилие, копро, рвота, беременность и т.д.)."""
     t = tag.lower()
-    # 1. Беременность, инфлейшн и оплодотворение
-    if any(sub in t for sub in ("pregnant", "pregnancy", "impregnat", "belly_expansion", "stomach_deformation", "oviposition", "hyper_pregnancy")):
+    # 1. Беременность и оплодотворение
+    if any(sub in t for sub in ("pregnant", "pregnancy", "impregnat")):
         return True
     # 2. Изнасилование, принуждение и недобровольное насилие
     if t in ("rape", "forced", "non-con", "non-consensual", "gang_rape", "molestation", "somnophilia", "mind_break"):
@@ -280,8 +280,33 @@ def is_disgusting_post_tag(tag: str) -> bool:
     if t in ("bestiality", "zoophilia"):
         return True
     # 6. Отвратительные персонажи и паразиты
-    if any(sub in t for sub in ("ugly_bastard", "parasite", "maggots", "hard_vore")):
+    if any(sub in t for sub in ("ugly_bastard", "parasite", "maggots")):
         return True
+    return False
+
+
+def is_weird_fetish_tag(tag: str) -> bool:
+    """Проверяет тег на странные фетиши (vore/поедание людей, гиперболизация/гипер-пропорции, инфляция)."""
+    t = tag.lower()
+    # 1. Поедание человека / воре / поглощение / unbirth
+    if t in ("vore", "soft_vore", "hard_vore", "cock_vore", "anal_vore", "tail_vore", "unbirth", "swallowed_whole", "digestion", "absorption"):
+        return True
+    if t.startswith("vore_") or t.endswith("_vore") or "_vore_" in t:
+        return True
+
+    # 2. Гиперболизация и гипер-пропорции
+    if t == "hyper" or t.startswith("hyper_") or t.endswith("_hyper") or "_hyper_" in t:
+        return True
+    if any(sub in t for sub in (
+        "implausible_proportions", "extreme_proportions", "gigantic_breasts",
+        "gigantic_ass", "body_expansion", "belly_expansion", "stomach_deformation",
+        "morbidly_obese", "inflation", "oviposition", "weight_gain", "extreme_muscles",
+        "hyper_pregnancy"
+    )):
+        return True
+    if t in ("giantess", "macro", "expansion", "hypertrophy"):
+        return True
+
     return False
 
 
@@ -407,7 +432,9 @@ class DeckGenerator:
         seen_post_ids: set,
         seen_api_hashes: set,
         seen_urls: set,
-        log_callback: Callable[[str], None]
+        log_callback: Callable[[str], None],
+        filter_shock_content: bool = True,
+        filter_weird_fetishes: bool = True
     ) -> list[dict]:
         """Ищет посты со случайной выборкой страниц и проверкой постоянной истории."""
         source_key = source if source in BOORU_SOURCES else "xbooru"
@@ -536,9 +563,13 @@ class DeckGenerator:
                     skipped_from_history += 1
                     continue
 
-                # 3. Фильтрация по отрицательным тегам и авто-блокировка шок-контента (гуро, насилие, копро, беременность)
+                # 3. Фильтрация по отрицательным тегам и активным щитам защиты
                 post_tags = set(post.get("tags", "").lower().split())
-                if post_tags.intersection(cleaned_negatives) or any(is_disgusting_post_tag(t) for t in post_tags):
+                if post_tags.intersection(cleaned_negatives):
+                    continue
+                if filter_shock_content and any(is_shock_content_tag(t) for t in post_tags):
+                    continue
+                if filter_weird_fetishes and any(is_weird_fetish_tag(t) for t in post_tags):
                     continue
 
                 # 4. Фильтрация по годам
@@ -624,7 +655,9 @@ class DeckGenerator:
         rule34_user_id: Optional[str] = None,
         rule34_api_key: Optional[str] = None,
         threads: int = 8,
-        progress_callback: Optional[Callable[[dict], None]] = None
+        progress_callback: Optional[Callable[[dict], None]] = None,
+        filter_shock_content: bool = True,
+        filter_weird_fetishes: bool = True
     ) -> dict:
         self.is_running = True
         self.should_stop = False
@@ -676,7 +709,9 @@ class DeckGenerator:
                 seen_post_ids=seen_post_ids,
                 seen_api_hashes=seen_api_hashes,
                 seen_urls=seen_urls,
-                log_callback=lambda msg: report(msg, 5)
+                log_callback=lambda msg: report(msg, 5),
+                filter_shock_content=filter_shock_content,
+                filter_weird_fetishes=filter_weird_fetishes
             )
             pools_by_char.append((char, target_count, posts))
 

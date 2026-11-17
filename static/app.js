@@ -252,6 +252,37 @@ document.addEventListener("DOMContentLoaded", () => {
     lastLogCount = 0;
   });
 
+  // --- 4.1. Управление щитами защиты (Шок-контент и Странные фетиши) ---
+  const shieldShockBtn = document.getElementById("shield-shock-btn");
+  const shieldFetishBtn = document.getElementById("shield-fetish-btn");
+
+  function setupShieldToggle(btn, storageKey) {
+    if (!btn) return;
+    const icon = btn.querySelector(".shield-icon");
+    const badge = btn.querySelector(".shield-badge");
+
+    const saved = localStorage.getItem(storageKey);
+    let isActive = saved !== null ? saved === "true" : true;
+
+    function render() {
+      btn.classList.toggle("active", isActive);
+      btn.dataset.active = isActive ? "true" : "false";
+      if (icon) icon.textContent = isActive ? "🛡️" : "🔓";
+      if (badge) badge.textContent = isActive ? "ВКЛ" : "СНЯТ";
+    }
+
+    render();
+
+    btn.addEventListener("click", () => {
+      isActive = !isActive;
+      localStorage.setItem(storageKey, String(isActive));
+      render();
+    });
+  }
+
+  setupShieldToggle(shieldShockBtn, "tts_shield_shock");
+  setupShieldToggle(shieldFetishBtn, "tts_shield_fetish");
+
   // --- 5. Запуск генерации ---
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -270,7 +301,9 @@ document.addEventListener("DOMContentLoaded", () => {
       card_width: cardW,
       card_height: cardH,
       threads: threadsCountSelect ? parseInt(threadsCountSelect.value, 10) : 8,
-      deck_title: deckTitleInput.value.trim() || "CUSTOM DECK"
+      deck_title: deckTitleInput.value.trim() || "CUSTOM DECK",
+      filter_shock_content: shieldShockBtn ? shieldShockBtn.classList.contains("active") : true,
+      filter_weird_fetishes: shieldFetishBtn ? shieldFetishBtn.classList.contains("active") : true
     };
 
     setRunningState(true);
