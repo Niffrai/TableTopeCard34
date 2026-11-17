@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 from typing import Callable, Optional
-from PIL import Image, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
+import numpy as np
 
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -339,6 +340,54 @@ def is_full_nudity_or_sex(post: dict, post_tags: set) -> bool:
 def is_explicit_post(post: dict, post_tags: set) -> bool:
     """Определяет, является ли пост откровенным (18+ / нагота / половой акт)."""
     return is_full_nudity_or_sex(post, post_tags)
+
+
+def is_empty_center_composition(img: Image.Image) -> bool:
+    """
+    Проверяет, является ли изображение пустым с объектом у самого края.
+    Отсекает арты, где более 75-80% холста занимает пустой/гладкий фон,
+    а объект прижат к крайней полосе шириной менее 22% у кромки.
+    """
+    try:
+        thumb = img.convert("RGB").resize((100, 100))
+        gray = ImageOps.grayscale(thumb)
+        edges = np.array(gray.filter(ImageFilter.FIND_EDGES))
+
+        # Обнуляем внешнюю кайму (артефакты сжатия по краям)
+        edges[:3, :] = 0
+        edges[-3:, :] = 0
+        edges[:, :3] = 0
+        edges[:, -3:] = 0
+
+        # Значимые контуры персонажа (высокий контраст)
+        sig = edges > 70
+        cols_with_sig = np.where(sig.any(axis=0))[0]
+
+        if len(cols_with_sig) == 0:
+            # Вообще нет деталей (сплошной однотонный лист)
+            return True
+
+        x_min, x_max = int(cols_with_sig[0]), int(cols_with_sig[-1])
+        span_width = x_max - x_min
+
+        # Центральная зона по горизонтали (от 20% до 80%)
+        center_has_details_x = bool(sig[:, 20:80].any())
+
+        # 1. По горизонтали: в центре [20:80] пусто, а контент ютится у левого или правого края
+        x_empty = (not center_has_details_x) and (span_width <= 22) and (x_max < 30 or x_min > 70)
+
+        # 2. По вертикали: в центре [20:80] пусто, а контент ютится у верхнего или нижнего края
+        rows_with_sig = np.where(sig.any(axis=1))[0]
+        if len(rows_with_sig) == 0:
+            return True
+        y_min, y_max = int(rows_with_sig[0]), int(rows_with_sig[-1])
+        span_height = y_max - y_min
+        center_has_details_y = bool(sig[20:80, :].any())
+        y_empty = (not center_has_details_y) and (span_height <= 20) and (y_max < 28 or y_min > 72)
+
+        return bool(x_empty or y_empty)
+    except Exception:
+        return False
 
 
 class DeckGenerator:
@@ -716,7 +765,8 @@ class DeckGenerator:
         progress_callback: Optional[Callable[[dict], None]] = None,
         filter_shock_content: bool = True,
         filter_weird_fetishes: bool = True,
-        content_mode: str = "balanced"
+        content_mode: str = "balanced",
+        filter_empty_center: bool = True
     ) -> dict:
         self.is_running = True
         self.should_stop = False
@@ -788,6 +838,7 @@ class DeckGenerator:
 
         processed_cards: list[Image.Image] = []
         duplicate_count = 0
+        empty_center_skipped = 0
 
         photos_dir = os.path.join(self.output_dir, "photos")
         os.makedirs(photos_dir, exist_ok=True)
@@ -877,6 +928,11 @@ class DeckGenerator:
                             duplicate_count += 1
                             continue
 
+                        # 3. Проверка композиции (пустой центр и смещение объекта к самому краю)
+                        if filter_empty_center and is_empty_center_composition(res["raw_img"]):
+                            empty_center_skipped += 1
+                            continue
+
                         # Карта уникальна!
                         seen_content_md5s.add(c_md5)
                         seen_visual_hashes.append(dh)
@@ -914,8 +970,13 @@ class DeckGenerator:
                 for f in futures:
                     f.cancel()
 
-        if duplicate_count > 0:
-            report(f"Отфильтровано дубликатов: {duplicate_count}", 89)
+        if duplicate_count > 0 or empty_center_skipped > 0:
+            msgs = []
+            if duplicate_count > 0:
+                msgs.append(f"дубликатов: {duplicate_count}")
+            if empty_center_skipped > 0:
+                msgs.append(f"пустых/смещённых: {empty_center_skipped}")
+            report(f"Отфильтровано {', '.join(msgs)}", 89)
 
         if not processed_cards:
             self.is_running = False
@@ -1020,6 +1081,7 @@ class DeckGenerator:
                 "path": tts_json_path
             },
             "duplicates_filtered": duplicate_count,
+            "empty_center_filtered": empty_center_skipped,
             "history_total": len(self.history["seen_content_md5s"])
         }
 

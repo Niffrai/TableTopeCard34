@@ -256,7 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const shieldShockBtn = document.getElementById("shield-shock-btn");
   const shieldFetishBtn = document.getElementById("shield-fetish-btn");
 
-  function setupShieldToggle(btn, storageKey) {
+  function setupShieldToggle(btn, storageKey, blockedText, allowedText) {
     if (!btn) return;
     const icon = btn.querySelector(".shield-icon");
     const badge = btn.querySelector(".shield-badge");
@@ -267,8 +267,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function render() {
       btn.classList.toggle("active", isActive);
       btn.dataset.active = isActive ? "true" : "false";
-      if (icon) icon.textContent = isActive ? "🛡️" : "🔓";
-      if (badge) badge.textContent = isActive ? "ВКЛ" : "СНЯТ";
+      if (icon) icon.textContent = isActive ? "🛡️" : "⚠️";
+      if (badge) badge.textContent = isActive ? blockedText : allowedText;
     }
 
     render();
@@ -280,8 +280,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  setupShieldToggle(shieldShockBtn, "tts_shield_shock");
-  setupShieldToggle(shieldFetishBtn, "tts_shield_fetish");
+  setupShieldToggle(shieldShockBtn, "tts_shield_shock", "ЗАБЛОКИРОВАН", "РАЗРЕШЁН");
+  setupShieldToggle(shieldFetishBtn, "tts_shield_fetish", "ЗАБЛОКИРОВАНЫ", "РАЗРЕШЕНЫ");
+
+  // --- 4.1.1. Второстепенный фильтр: Отсекать арты с пустым центром ---
+  const filterEmptyCenterBtn = document.getElementById("filter-empty-center-btn");
+  if (filterEmptyCenterBtn) {
+    const icon = filterEmptyCenterBtn.querySelector(".secondary-filter-icon");
+    const badge = filterEmptyCenterBtn.querySelector(".secondary-filter-badge");
+    const saved = localStorage.getItem("tts_filter_empty_center");
+    let isActive = saved !== null ? saved === "true" : true;
+
+    function renderEmptyCenter() {
+      filterEmptyCenterBtn.classList.toggle("active", isActive);
+      filterEmptyCenterBtn.dataset.active = isActive ? "true" : "false";
+      if (icon) icon.textContent = isActive ? "🎯" : "⚪";
+      if (badge) badge.textContent = isActive ? "ВКЛ" : "ВЫКЛ";
+    }
+
+    renderEmptyCenter();
+
+    filterEmptyCenterBtn.addEventListener("click", () => {
+      isActive = !isActive;
+      localStorage.setItem("tts_filter_empty_center", String(isActive));
+      renderEmptyCenter();
+    });
+  }
 
   // --- 4.2. Переключатель режима откровенности контента ---
   const contentModeBadge = document.getElementById("content-mode-badge");
@@ -353,6 +377,7 @@ document.addEventListener("DOMContentLoaded", () => {
       deck_title: deckTitleInput.value.trim() || "CUSTOM DECK",
       filter_shock_content: shieldShockBtn ? shieldShockBtn.classList.contains("active") : true,
       filter_weird_fetishes: shieldFetishBtn ? shieldFetishBtn.classList.contains("active") : true,
+      filter_empty_center: filterEmptyCenterBtn ? filterEmptyCenterBtn.classList.contains("active") : true,
       content_mode: activeModeBtn ? activeModeBtn.dataset.mode : "explicit"
     };
 
@@ -762,6 +787,9 @@ document.addEventListener("DOMContentLoaded", () => {
     let summary = `Успешно создано ${result.total_cards} уникальных карт. Собрано листов: ${result.sheets.length}.`;
     if (result.duplicates_filtered) {
       summary += ` Отсеяно повторов: ${result.duplicates_filtered}.`;
+    }
+    if (result.empty_center_filtered) {
+      summary += ` Отсеяно пустых/смещённых: ${result.empty_center_filtered}.`;
     }
     resultSummary.textContent = summary;
     sheetsList.innerHTML = "";

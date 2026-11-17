@@ -144,19 +144,29 @@
               </label>
             </div>
 
-            <!-- 2 Интерактивных щита защиты (нажмите, чтобы снять / включить) -->
+            <!-- 2 Интерактивных щита защиты (нажмите, чтобы снять / включить блокировку) -->
             <div class="shield-badges-container">
-              <button type="button" id="shield-shock-btn" class="shield-btn active" data-active="true" title="Защита от расчленения, гуро, насилия, беременности и копро. Нажмите, чтобы снять/включить.">
+              <button type="button" id="shield-shock-btn" class="shield-btn active" data-active="true" title="Защита от расчленения, гуро, насилия, беременности и копро. Нажмите, чтобы снять/включить блокировку.">
                 <span class="shield-icon">🛡️</span>
                 <span class="shield-label">Шок-контент (гуро/насилие)</span>
-                <span class="shield-badge">ВКЛ</span>
+                <span class="shield-badge">ЗАБЛОКИРОВАН</span>
               </button>
 
-              <button type="button" id="shield-fetish-btn" class="shield-btn active" data-active="true" title="Защита от гиперболизации пропорций, vore (поедание людей), инфляции. Нажмите, чтобы снять/включить.">
+              <button type="button" id="shield-fetish-btn" class="shield-btn active" data-active="true" title="Защита от гиперболизации пропорций, vore (поедание людей), инфляции. Нажмите, чтобы снять/включить блокировку.">
                 <span class="shield-icon">🛡️</span>
                 <span class="shield-label">Странные фетиши (гипер/vore)</span>
-                <span class="shield-badge">ВКЛ</span>
+                <span class="shield-badge">ЗАБЛОКИРОВАНЫ</span>
               </button>
+            </div>
+
+            <!-- Второстепенный фильтр композиции -->
+            <div class="secondary-filters-container">
+              <button type="button" id="filter-empty-center-btn" class="secondary-filter-btn active" data-active="true">
+                <span class="secondary-filter-icon">🎯</span>
+                <span class="secondary-filter-label">Отсекать арты с пустым центром</span>
+                <span class="secondary-filter-badge">ВКЛ</span>
+              </button>
+              <button type="button" class="info-btn info-btn-sm" data-tooltip="Отсекает арты с пустым центром и персонажем на краю.">i</button>
             </div>
 
             <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text" placeholder="comic, 3d, text, watermark">
