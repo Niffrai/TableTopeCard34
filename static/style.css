@@ -4,6 +4,7 @@
    ========================================================================== */
 
 :root {
+  color-scheme: dark;
   --bg-page: #000000;
   --bg-surface: #08090a;
   --bg-surface-elevated: #0d0e12;
@@ -333,6 +334,26 @@ textarea:focus {
   border-color: var(--border-focus);
   background: var(--bg-surface);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* Number Inputs & Spinner Arrows (eliminated old 3D white beveled borders) */
+input[type="number"] {
+  color-scheme: dark;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 0.5;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  filter: contrast(0.85);
+  transition: opacity 0.15s ease;
+}
+
+input[type="number"]:hover::-webkit-inner-spin-button,
+input[type="number"]:focus::-webkit-inner-spin-button {
+  opacity: 1;
 }
 
 textarea {
@@ -700,11 +721,22 @@ select {
 }
 
 .deck-size-input-wrap input {
-  width: 72px;
-  padding: 5px 8px;
+  width: 76px;
+  padding: 6px 10px;
   text-align: right;
   font-weight: 600;
   font-size: 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  color: var(--text-heading);
+}
+
+.deck-size-input-wrap input:focus {
+  border-color: var(--border-focus);
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  outline: none;
 }
 
 .cards-unit {
@@ -1436,6 +1468,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
    ========================================================================== */
 
 body.theme-frutiger-aero {
+  color-scheme: light;
   --font-main: 'Segoe UI', 'Trebuchet MS', 'Lucida Grande', sans-serif;
   font-family: var(--font-main);
   letter-spacing: normal;
