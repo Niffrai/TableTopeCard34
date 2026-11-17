@@ -548,7 +548,15 @@ class DeckGenerator:
             if tag and tag not in api_query_tags and len(api_query_tags) < 3:
                 api_query_tags.append(tag)
 
-        if len(api_query_tags) < 3:
+        # Для режима light (горячий SFW без 18+) на Booru гарантируем исключение рейтинга explicit
+        if content_mode == "light" and source_key in ("xbooru", "rule34"):
+            has_rating = any("rating:" in t for t in api_query_tags)
+            if not has_rating:
+                if len(api_query_tags) >= 3:
+                    api_query_tags.pop()
+                api_query_tags.append("-rating:explicit")
+
+        if len(api_query_tags) < 3 and "-video" not in api_query_tags:
             api_query_tags.append("-video")
 
         tags_query_str = " ".join(api_query_tags)

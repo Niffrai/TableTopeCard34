@@ -328,8 +328,8 @@ document.addEventListener("DOMContentLoaded", () => {
         contentModeBadge.textContent = "🌸 Горячий SFW (Без наготы)";
         contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
-          posTagsInput.value = "highres, solo, ecchi, suggestive";
-          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, nudity, completely_nude, sex, pussy, penis, cum, nipples, penetration, masturbation, topless, bottomless";
+          posTagsInput.value = "highres, solo, -rating:explicit";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else {
         contentModeBadge.textContent = "✨ Сбалансированный";
