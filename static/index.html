@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS Card Deck Builder</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Шапка -->
+    <header class="app-header">
+      <div class="logo-area">
+        <div class="logo-icon">🎴</div>
+        <div>
+          <h1>Tabletop Simulator <span class="accent-text">Deck Builder</span></h1>
+          <p class="subtitle">Автоматический сборщик колод для Tabletop Simulator (до 456+ карт)</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span id="history-badge" class="badge badge-subtle" title="Количество запомненных карт в базе истории (они больше не повторятся)">🧠 В истории: 0 карт</span>
+        <input type="file" id="friend-zip-input" accept=".zip" class="hidden">
+        <button id="btn-import-zip" class="btn btn-primary btn-sm" title="Импортировать ZIP-архив с колодой от друга">📥 Импортировать от друга</button>
+        <button id="btn-show-guide" class="btn btn-ghost btn-sm" title="Инструкция: как передать колоду другу">❓ Подсказка для друга</button>
+        <button id="btn-clear-history" class="btn btn-ghost btn-sm" title="Сбросить историю скачанных карт">🔄 Сбросить историю</button>
+        <button id="btn-open-folder" class="btn btn-secondary btn-sm" title="Открыть папку с файлами проекта">📁 Папка проекта</button>
+      </div>
+    </header>
+
+    <!-- Вкладки приложения -->
+    <nav class="app-tabs-nav">
+      <button type="button" class="tab-btn active" data-tab="tab-generator">
+        <span class="tab-icon">⚡</span> Генератор колод
+      </button>
+      <button type="button" class="tab-btn" data-tab="tab-installed">
+        <span class="tab-icon">📚</span> Вшитые колоды в TTS
+        <span id="installed-decks-badge" class="tab-badge">0</span>
+      </button>
+    </nav>
+
+    <!-- Вкладка 1: Генератор колод -->
+    <div id="tab-generator" class="tab-view active">
+      <main class="main-grid">
+      <!-- Левая колонка: Настройки генерации -->
+      <section class="card config-card">
+        <h2 class="card-title">⚙️ Параметры генерации</h2>
+        
+        <form id="gen-form">
+          <!-- Источник изображений -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="booru_source">Источник изображений</label>
+              <span id="source-status-badge" class="badge-subtle">Без регистрации</span>
+            </div>
+            <select id="booru_source">
+              <option value="xbooru" selected>Xbooru (Без API ключей / NSFW - Рекомендуется)</option>
+              <option value="rule34">Rule34.xxx (Требует User ID и API Key)</option>
+              <option value="safebooru">Safebooru (SFW / Без 18+)</option>
+            </select>
+          </div>
+
+          <!-- Настройки авторизации Rule34 -->
+          <div id="rule34-auth-box" class="form-group auth-box hidden">
+            <div class="auth-box-title">🔑 Авторизация для Rule34.xxx</div>
+            <p class="auth-hint">
+              Сайт rule34.xxx требует авторизацию. Получите ключ бесплатно:
+            </p>
+            <div class="form-row-compact" style="margin-bottom: 8px;">
+              <input type="text" id="rule34_user_id" placeholder="User ID (например 123456)">
+              <input type="text" id="rule34_api_key" placeholder="API Key (токен)">
+            </div>
+            <small class="field-hint">
+              Где взять: Зайдите в аккаунт на <a href="https://rule34.xxx/index.php?page=account&s=options" target="_blank" style="color: #818cf8; text-decoration: underline;">rule34.xxx/options</a> → раздел <strong>API Access Credentials</strong>.
+            </small>
+          </div>
+
+          <!-- Персонажи -->
+          <div class="form-group">
+            <div class="label-row">
+              <label for="characters">Список персонажей (опционально)</label>
+              <span id="char-calc-badge" class="badge-subtle">Случайный пул</span>
+            </div>
+            <textarea id="characters" rows="2" placeholder="Например: 2B, Tifa Lockhart, Makima, Yennefer"></textarea>
+            <small class="field-hint">
+              Вводите через запятую или с новой строки. Карты распределятся поровну между всеми указанными персонажами.
+            </small>
+          </div>
+
+          <!-- Положительные теги -->
+          <div class="form-group">
+            <label for="positive_tags">Положительные теги (по которым искать)</label>
+            <input type="text" id="positive_tags" value="highres, solo" placeholder="highres, solo, swimsuit, cosplay">
+            <div class="quick-chips">
+              <span class="chip-label">Быстро добавить:</span>
+              <button type="button" class="chip" data-target="positive_tags" data-val="1girl">+ 1girl</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="highres">+ highres</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="masterpiece">+ masterpiece</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="swimsuit">+ swimsuit</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="score:>20">+ score:>20</button>
+            </div>
+          </div>
+
+          <!-- Отрицательные теги -->
+          <div class="form-group">
+            <label for="negative_tags">Отрицательные теги (исключить из поиска)</label>
+            <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text" placeholder="comic, 3d, text, watermark">
+            <div class="quick-chips">
+              <span class="chip-label">Быстро добавить:</span>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="comic">- comic</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="bad_anatomy">- bad_anatomy</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="lowres">- lowres</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="3d">- 3d</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="text">- text</button>
+            </div>
+          </div>
+
+          <!-- Количество карт и размер -->
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <div class="label-row">
+                <label for="total_cards_range">Всего карт в колоде</label>
+                <input type="number" id="total_cards_num" min="1" max="1000" value="456" style="width: 80px; text-align: right; font-weight: 700; color: var(--primary);">
+              </div>
+              <input type="range" id="total_cards_range" min="10" max="600" step="1" value="456">
+              <small class="field-hint">456 карт = 7 листов (6x70 + 1x36 карт). В игре все листы объединяются в одну колоду!</small>
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="card_resolution">Разрешение карт</label>
+              <select id="card_resolution">
+                <option value="300x420" selected>300 × 420 (Быстрая загрузка в игре)</option>
+                <option value="400x560">400 × 560 (Повышенная чёткость)</option>
+                <option value="500x700">500 × 700 (HD качество)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Фильтр годов -->
+          <div class="form-group">
+            <label>Фильтр по годам публикации (необязательно)</label>
+            <div class="form-row-compact">
+              <div class="input-with-label">
+                <span>От:</span>
+                <input type="number" id="year_from" min="2005" max="2026" placeholder="Любой">
+              </div>
+              <div class="input-with-label">
+                <span>До:</span>
+                <input type="number" id="year_to" min="2005" max="2026" placeholder="Любой">
+              </div>
+              <button type="button" id="btn-reset-years" class="btn btn-ghost btn-xs">Сбросить</button>
+            </div>
+          </div>
+
+          <!-- Название колоды -->
+          <div class="form-group">
+            <label for="deck_title">Название колоды (для рубашки)</label>
+            <input type="text" id="deck_title" value="CUSTOM DECK" placeholder="Например: WAIFU DECK">
+          </div>
+
+          <!-- Кнопки запуска -->
+          <div class="action-buttons">
+            <button type="submit" id="btn-generate" class="btn btn-primary btn-block">
+              <span class="btn-icon">⚡</span> Создать колоду
+            </button>
+            <button type="button" id="btn-stop" class="btn btn-danger btn-block hidden">
+              ⛔ Остановить процесс
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- Правая колонка: Прогресс и результат (БЕЗ показа картинок) -->
+      <section class="card monitor-card">
+        <h2 class="card-title">📡 Мониторинг выполнения</h2>
+
+        <!-- Прогресс бар -->
+        <div class="progress-box">
+          <div class="progress-header">
+            <span id="status-text">Ожидание запуска...</span>
+            <span id="percent-text">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress-bar" class="progress-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+
+        <!-- Секция готового результата -->
+        <div id="result-box" class="result-box hidden">
+          <div class="result-alert">
+            <div class="result-icon">🎉</div>
+            <div class="result-info">
+              <h3>Колода готова к использованию!</h3>
+              <p id="result-summary">Создано 456 карт.</p>
+            </div>
+          </div>
+
+          <div class="result-actions" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-save-game" class="btn btn-primary" style="flex: 1;">
+                🎮 Сохранить как ИГРУ (Games → Save & Load)
+              </button>
+              <button id="btn-save-object" class="btn btn-success" style="flex: 1;">
+                📦 Сохранить в Saved Objects
+              </button>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-export-zip" class="btn btn-primary" style="flex: 1; background: #8b5cf6; border-color: #7c3aed;">
+                📦 Скачать ZIP-архив для друга (.zip)
+              </button>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button id="btn-open-photos" class="btn btn-secondary" style="flex: 1;">
+                📷 Открыть папку с фото (photos)
+              </button>
+              <button id="btn-open-res-folder" class="btn btn-secondary" style="flex: 1;">
+                📂 Папка с листами (output)
+              </button>
+            </div>
+          </div>
+
+          <div class="sheets-gallery-title" style="margin-top: 15px;">Сгенерированные листы колоды:</div>
+          <div id="sheets-list" class="sheets-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+        </div>
+
+        <!-- Консоль логов -->
+        <div class="console-box" style="margin-top: 20px;">
+          <div class="console-header">
+            <span>Логи выполнения</span>
+            <button id="btn-clear-logs" class="btn-text-xs">Очистить</button>
+          </div>
+          <div id="logs-container" class="logs-container" style="height: 280px;">
+            <div class="log-line text-muted">[00:00:00] Готов к работе.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+      <!-- Подсказка по импорту в Tabletop Simulator -->
+      <footer class="app-footer card">
+        <h3>💡 Как загрузить колоду в Tabletop Simulator:</h3>
+        <ol class="instructions-list">
+          <li>
+            <strong>Способ 1 — Как готовую ИГРУ (Рекомендуется):</strong> Нажмите синюю кнопку <em>«🎮 Сохранить как ИГРУ»</em>. В Tabletop Simulator выберите <code>Create → Singleplayer / Multiplayer → Games → Save & Load</code>. Игра откроется с кастомным столом <strong>Tier List (S, A+, A, B+, B, C+, C)</strong> и тёмным фоном, на котором в специальной зоне уже будет лежать готовая колода!
+          </li>
+          <li>
+            <strong>Способ 2 — Как ОБЪЕКТ:</strong> Нажмите зелёную кнопку <em>«📦 Сохранить в Saved Objects»</em>. На любом столе в игре откройте <code>Objects → Saved Objects</code> и перетащите колоду.
+          </li>
+        </ol>
+      </footer>
+    </div><!-- /tab-generator -->
+
+    <!-- Вкладка 2: Вшитые колоды в Tabletop Simulator -->
+    <div id="tab-installed" class="tab-view hidden">
+      <section class="card installed-card">
+        <div class="installed-header">
+          <div>
+            <h2 class="card-title">📚 Колоды, установленные в Tabletop Simulator</h2>
+            <p class="subtitle" style="margin-top: 4px;">Здесь собраны все игры и сохранённые объекты, доступные в вашей игре. Вы можете просмотреть их и удалить ненужные в 1 клик.</p>
+          </div>
+          <div class="installed-header-actions">
+            <button id="btn-refresh-decks" class="btn btn-secondary btn-sm" title="Обновить список колод">🔄 Обновить</button>
+            <button id="btn-open-tts-dir" class="btn btn-secondary btn-sm" title="Открыть папку сохранений Tabletop Simulator">📁 Папка сохранений TTS</button>
+            <button id="btn-delete-all-decks" class="btn btn-danger btn-sm" title="Удалить ВСЕ созданные генератором колоды из Tabletop Simulator">🗑️ Очистить все колоды из TTS</button>
+          </div>
+        </div>
+
+        <!-- Панель поиска и фильтров -->
+        <div class="installed-filter-bar">
+          <div class="search-input-wrapper">
+            <input type="text" id="installed-search" placeholder="🔍 Поиск по названию колоды..." class="filter-search-input">
+          </div>
+          <div class="filter-type-wrapper">
+            <select id="installed-type-filter" class="filter-type-select">
+              <option value="all">Все типы колод</option>
+              <option value="game">🎮 Только игры (Save & Load)</option>
+              <option value="saved_object">📦 Только Saved Objects</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Сетка карточек с колодами -->
+        <div id="installed-decks-grid" class="installed-grid">
+          <!-- Карточки вставляются через JavaScript -->
+        </div>
+
+        <!-- Пустое состояние (когда нет колод) -->
+        <div id="installed-empty" class="installed-empty-state hidden">
+          <div class="empty-state-icon">🎴</div>
+          <h3>В Tabletop Simulator пока нет сохранённых колод</h3>
+          <p>Создайте свою первую колоду с уникальными карточками или импортируйте ZIP-архив от друга!</p>
+          <button id="btn-goto-generator" class="btn btn-primary" style="margin-top: 14px;">⚡ Перейти к генератору колод</button>
+        </div>
+      </section>
+    </div><!-- /tab-installed -->
+  </div>
+
+  <!-- Модальное окно: Инструкция для друга -->
+  <div id="guide-modal" class="modal hidden">
+    <div class="modal-backdrop" id="guide-modal-backdrop"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>❓ Как передать колоду другу в Tabletop Simulator</h3>
+        <button id="guide-modal-close" class="modal-close-btn" title="Закрыть">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-muted); font-size: 13px;">
+          Вы можете переслать готовую колоду другу в одном ZIP-архиве. В архиве уже лежат все необходимые текстуры стола Tier List, листы карт, рубашка и текстовая подсказка.
+        </p>
+
+        <div class="guide-step">
+          <h4>🚀 Способ 1: У друга тоже есть это приложение (1 клик — Рекомендуется)</h4>
+          <ol>
+            <li>После генерации колоды нажмите кнопку <strong>«📦 Скачать ZIP-архив для друга»</strong>.</li>
+            <li>Отправьте скачанный архив <code>TTS_Deck_Package.zip</code> другу (через Telegram, Discord и т.д.).</li>
+            <li>Друг открывает наше веб-приложение и в шапке нажимает кнопку <strong>«📥 Импортировать от друга»</strong>.</li>
+            <li>Выбирает полученный ZIP-файл. Приложение <strong>самостоятельно распакует файлы</strong> в его папку Tabletop Simulator и свяжет текстуры с его компьютером (никаких белых карт!).</li>
+            <li>Друг заходит в Tabletop Simulator: <code>Create → Games → Save & Load</code> и загружает появившееся сохранение. Стол Tier List и колода готовы к игре!</li>
+          </ol>
+        </div>
+
+        <div class="guide-step">
+          <h4>🛠️ Способ 2: У друга НЕТ этого приложения (Ручной импорт в игре)</h4>
+          <ol>
+            <li>Друг распаковывает присланный архив <code>.zip</code> в любую папку на диске. Внутри архива лежит файл <code>ИНСТРУКЦИЯ_ДЛЯ_ДРУГА.txt</code>.</li>
+            <li>В игре Tabletop Simulator друг нажимает: <code>Objects → Components → Cards → Custom Deck</code>.</li>
+            <li>В окне настроек колоды указывает:
+              <ul>
+                <li><strong>Face (Лицо):</strong> выбирает файл <code>deck_sheet_1.png</code> из распакованного архива.</li>
+                <li><strong>Back (Рубашка):</strong> выбирает <code>card_back.png</code>.</li>
+                <li><strong>Width (Ширина):</strong> 10.</li>
+                <li><strong>Height (Высота):</strong> 7.</li>
+                <li><strong>Number (Количество карт):</strong> 70.</li>
+              </ul>
+            </li>
+            <li>Нажимает <strong>Import</strong>. Если листов несколько (например, колода на 456 карт), аналогично импортирует <code>deck_sheet_2.png</code>, <code>deck_sheet_3.png</code> и т.д., а затем объединяет их клавишей <code>G</code> в одну стопку!</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
