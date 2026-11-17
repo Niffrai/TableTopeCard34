@@ -95,6 +95,9 @@ def generation_worker(params: dict):
             filter_empty_center = filter_empty_center.lower() in ("true", "1", "yes")
 
         content_mode = params.get("content_mode", "balanced")
+        fit_mode = params.get("fit_mode", "cover")
+        if fit_mode not in ("cover", "contain"):
+            fit_mode = "cover"
 
         res = generator.generate_deck(
             positive_tags=pos_tags,
@@ -114,7 +117,8 @@ def generation_worker(params: dict):
             filter_shock_content=filter_shock,
             filter_weird_fetishes=filter_fetishes,
             content_mode=content_mode,
-            filter_empty_center=filter_empty_center
+            filter_empty_center=filter_empty_center,
+            fit_mode=fit_mode
         )
 
         if res.get("success"):

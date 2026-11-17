@@ -496,6 +496,68 @@ select {
 }
 
 /* ==========================================================================
+   Image Fit Mode Segmented Control
+   ========================================================================== */
+
+.fit-mode-segmented {
+  display: flex;
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-input);
+  padding: 3px;
+  gap: 4px;
+}
+
+.fit-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: calc(var(--radius-input) - 2px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.fit-btn svg {
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.fit-btn:hover {
+  color: var(--text-heading);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fit-btn:hover svg {
+  opacity: 1;
+}
+
+.fit-btn.active {
+  color: var(--text-heading);
+  background: var(--bg-surface-elevated);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  font-weight: 600;
+}
+
+.fit-btn.active svg {
+  opacity: 1;
+  stroke: var(--text-heading);
+}
+
+@media (max-width: 600px) {
+  .fit-mode-segmented {
+    flex-direction: column;
+  }
+}
+
+/* ==========================================================================
    Shields & Filters (Protection Switches)
    ========================================================================== */
 
@@ -1663,6 +1725,36 @@ body.theme-frutiger-aero .mode-btn.active {
   border: 1px solid #065f46;
   box-shadow: 0 3px 8px rgba(5, 150, 105, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.9);
   text-shadow: 0 1px 2px rgba(0, 30, 15, 0.6);
+}
+
+/* Image Fit Mode in Frutiger Aero */
+body.theme-frutiger-aero .fit-mode-segmented {
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(160, 210, 245, 0.85);
+  box-shadow: inset 0 1px 3px rgba(0, 30, 70, 0.1);
+  border-radius: var(--radius-input);
+}
+
+body.theme-frutiger-aero .fit-btn {
+  color: #0e4b75;
+  border-radius: calc(var(--radius-input) - 2px);
+}
+
+body.theme-frutiger-aero .fit-btn:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: #0284c7;
+}
+
+body.theme-frutiger-aero .fit-btn.active {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 48%, #0369a1 52%, #075985 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.45), inset 0 1px 1px rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 20, 50, 0.5);
+  font-weight: 600;
+}
+
+body.theme-frutiger-aero .fit-btn.active svg {
+  stroke: #ffffff;
 }
 
 /* Shields & Protection Filters */

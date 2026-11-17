@@ -351,12 +351,43 @@ document.addEventListener("DOMContentLoaded", () => {
     setContentMode(savedMode, false);
   }
 
+  // --- 4.3. Режим масштабирования артов (во весь размер / целиком) ---
+  const fitModeBadge = document.getElementById("fit-mode-badge");
+  const fitButtons = document.querySelectorAll(".fit-btn");
+
+  function setFitMode(mode) {
+    fitButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.fit === mode);
+    });
+    if (fitModeBadge) {
+      if (mode === "contain") {
+        fitModeBadge.textContent = "Целиком без обрезки";
+      } else {
+        fitModeBadge.textContent = "Во весь размер";
+      }
+    }
+    localStorage.setItem("tts_fit_mode", mode);
+  }
+
+  fitButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.fit;
+      if (mode) setFitMode(mode);
+    });
+  });
+
+  const savedFitMode = localStorage.getItem("tts_fit_mode");
+  if (savedFitMode) {
+    setFitMode(savedFitMode);
+  }
+
   // --- 5. Запуск генерации ---
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const [cardW, cardH] = cardResolutionSelect.value.split("x").map(Number);
     const activeModeBtn = document.querySelector(".mode-btn.active");
+    const activeFitBtn = document.querySelector(".fit-btn.active");
     const payload = {
       source: booruSourceSelect ? booruSourceSelect.value : "xbooru",
       rule34_user_id: rule34UserIdInput ? rule34UserIdInput.value.trim() : "",
@@ -374,7 +405,8 @@ document.addEventListener("DOMContentLoaded", () => {
       filter_shock_content: shieldShockBtn ? shieldShockBtn.classList.contains("active") : true,
       filter_weird_fetishes: shieldFetishBtn ? shieldFetishBtn.classList.contains("active") : true,
       filter_empty_center: filterEmptyCenterBtn ? filterEmptyCenterBtn.classList.contains("active") : true,
-      content_mode: activeModeBtn ? activeModeBtn.dataset.mode : "explicit"
+      content_mode: activeModeBtn ? activeModeBtn.dataset.mode : "explicit",
+      fit_mode: activeFitBtn ? activeFitBtn.dataset.fit : "cover"
     };
 
     setRunningState(true);

@@ -806,6 +806,46 @@ class DeckGenerator:
         img.save(back_path, "PNG")
         return back_path
 
+    @staticmethod
+    def prepare_card_image(raw_img: Image.Image, target_w: int, target_h: int, fit_mode: str = "cover") -> Image.Image:
+        """
+        Подгоняет арт под размеры карты:
+        - 'cover': заполняет 100% карты, кадрируя лишние края по центру (без черных полос).
+        - 'contain': размещает арт целиком на 100% без обрезки, а пустые поля
+          заполняет размытым и мягко затемненным фоном из этого же арта.
+        """
+        if fit_mode == "contain":
+            orig_w, orig_h = raw_img.size
+            target_ratio = target_w / target_h
+            orig_ratio = orig_w / orig_h
+
+            # Если пропорции почти совпадают (погрешность < 2%)
+            if abs(orig_ratio - target_ratio) < 0.02:
+                return raw_img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+
+            # 1. Размытый фон из оригинального арта (заполняет всю карточку)
+            bg = ImageOps.fit(raw_img, (target_w, target_h), Image.Resampling.BILINEAR)
+            bg = bg.filter(ImageFilter.GaussianBlur(radius=18))
+
+            # 2. Мягкое затемнение фона (35% черного), чтобы арт четко выделялся
+            dark_layer = Image.new("RGB", (target_w, target_h), (0, 0, 0))
+            bg = Image.blend(bg, dark_layer, 0.35)
+
+            # 3. Масштабируем оригинальный арт так, чтобы он полностью влез без обрезки
+            scale = min(target_w / orig_w, target_h / orig_h)
+            new_w = max(1, int(round(orig_w * scale)))
+            new_h = max(1, int(round(orig_h * scale)))
+            main_art = raw_img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+            # 4. Центрируем и накладываем поверх размытого фона
+            offset_x = (target_w - new_w) // 2
+            offset_y = (target_h - new_h) // 2
+            bg.paste(main_art, (offset_x, offset_y))
+            return bg
+
+        # Режим по умолчанию: "cover" (во весь размер с кадрированием по центру)
+        return ImageOps.fit(raw_img, (target_w, target_h), Image.Resampling.LANCZOS)
+
     def generate_deck(
         self,
         positive_tags: list[str],
@@ -825,7 +865,8 @@ class DeckGenerator:
         filter_shock_content: bool = True,
         filter_weird_fetishes: bool = True,
         content_mode: str = "balanced",
-        filter_empty_center: bool = True
+        filter_empty_center: bool = True,
+        fit_mode: str = "cover"
     ) -> dict:
         self.is_running = True
         self.should_stop = False
@@ -1004,7 +1045,7 @@ class DeckGenerator:
                         new_content_md5s.append(c_md5)
                         new_visual_hashes.append(dh)
 
-                        card_img = ImageOps.fit(res["raw_img"], (card_width, card_height), Image.Resampling.LANCZOS)
+                        card_img = self.prepare_card_image(res["raw_img"], card_width, card_height, fit_mode)
                         processed_cards.append(card_img)
                         downloaded_for_char += 1
 
