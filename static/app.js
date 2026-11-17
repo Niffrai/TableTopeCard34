@@ -188,15 +188,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  document.querySelectorAll(".mode-btn").forEach(btn => {
-    btn.addEventListener("mouseenter", () => {
-      if (!activeTooltipBtn) showTooltip(btn);
-    });
-    btn.addEventListener("mouseleave", () => {
-      if (activeTooltipBtn !== btn) hideTooltip();
-    });
-  });
-
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".info-btn") && !e.target.closest(".app-floating-tooltip")) {
       hideTooltip();
@@ -310,11 +301,11 @@ document.addEventListener("DOMContentLoaded", () => {
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else if (mode === "light") {
-        contentModeBadge.textContent = "🌸 Лайтовый (SFW)";
+        contentModeBadge.textContent = "🌸 Горячий SFW (Без наготы)";
         contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
-          posTagsInput.value = "highres, solo, clothed, aesthetic";
-          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, nudity, sex, pussy, penis, explicit, topless, bottomless, cum, nipples, masturbation";
+          posTagsInput.value = "highres, solo, ecchi, suggestive";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, nudity, completely_nude, sex, pussy, penis, cum, nipples, penetration, masturbation, topless, bottomless";
         }
       } else {
         contentModeBadge.textContent = "✨ Сбалансированный";
@@ -367,6 +358,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setRunningState(true);
     resultBox.classList.add("hidden");
+
+    // Полный сброс консоли и индикаторов для нового запуска
+    lastLogCount = 0;
+    logsContainer.innerHTML = "";
+    progressBar.style.width = "0%";
+    percentText.textContent = "0%";
+    statusText.textContent = "Инициализация...";
 
     try {
       const res = await fetch("/api/generate", {
@@ -716,16 +714,22 @@ document.addEventListener("DOMContentLoaded", () => {
       statusText.textContent = state.status_message || "...";
 
       // Логи
-      if (state.logs && state.logs.length > lastLogCount) {
-        const newLogs = state.logs.slice(lastLogCount);
-        newLogs.forEach(line => {
-          const div = document.createElement("div");
-          div.className = "log-line";
-          div.textContent = line;
-          logsContainer.appendChild(div);
-        });
-        lastLogCount = state.logs.length;
-        logsContainer.scrollTop = logsContainer.scrollHeight;
+      if (state.logs) {
+        if (state.logs.length < lastLogCount) {
+          logsContainer.innerHTML = "";
+          lastLogCount = 0;
+        }
+        if (state.logs.length > lastLogCount) {
+          const newLogs = state.logs.slice(lastLogCount);
+          newLogs.forEach(line => {
+            const div = document.createElement("div");
+            div.className = "log-line";
+            div.textContent = line;
+            logsContainer.appendChild(div);
+          });
+          lastLogCount = state.logs.length;
+          logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
       }
 
       // Завершение

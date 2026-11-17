@@ -46,12 +46,6 @@ def append_log(message: str):
 def generation_worker(params: dict):
     global app_state
     app_state["is_running"] = True
-    app_state["percent"] = 0
-    app_state["error"] = None
-    app_state["result"] = None
-    app_state["logs"] = []
-
-    append_log("Запуск генерации колоды...")
 
     def on_progress(p_data: dict):
         app_state["status_message"] = p_data.get("status", "")
@@ -524,6 +518,15 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             if app_state["is_running"]:
                 self._send_json({"success": False, "error": "Генерация уже идёт"}, 400)
                 return
+
+            # Мгновенно очищаем состояние логов и прогресса перед стартом потока
+            app_state["is_running"] = True
+            app_state["percent"] = 0
+            app_state["error"] = None
+            app_state["result"] = None
+            app_state["logs"] = []
+            app_state["status_message"] = "Запуск генерации колоды..."
+            append_log("Запуск генерации колоды...")
 
             t = threading.Thread(target=generation_worker, args=(payload,), daemon=True)
             t.start()

@@ -310,22 +310,20 @@ def is_weird_fetish_tag(tag: str) -> bool:
     return False
 
 
-EXPLICIT_TAGS = {
+FULL_NUDITY_AND_SEX_TAGS = {
     "nude", "nudity", "topless", "bottomless", "completely_nude",
     "sex", "penetration", "vaginal", "anal", "oral", "fellatio", "cunnilingus",
     "pussy", "vagina", "penis", "testicles", "cock", "dick",
     "cum", "creampie", "ejaculation", "cum_inside", "cum_on_body",
-    "nipples", "areola", "cameltoe", "pussy_juice", "masturbation",
-    "fingering", "dildo", "sex_toy", "explicit", "uncensored"
+    "nipples", "areola", "pussy_juice", "masturbation",
+    "fingering", "dildo", "sex_toy", "uncensored", "no_clothes",
+    "exposed_breasts", "naked"
 }
 
 
-def is_explicit_post(post: dict, post_tags: set) -> bool:
-    """Определяет, является ли пост откровенным (18+ / нагота / половой акт)."""
-    rating = str(post.get("rating", "")).lower()
-    if rating in ("explicit", "e"):
-        return True
-    if post_tags.intersection(EXPLICIT_TAGS):
+def is_full_nudity_or_sex(post: dict, post_tags: set) -> bool:
+    """Проверяет, содержит ли пост полную наготу или половые акты (гениталии, соски, половой акт)."""
+    if post_tags.intersection(FULL_NUDITY_AND_SEX_TAGS):
         return True
     if any(
         t.startswith("cum_") or t.endswith("_cum") or "_cum_" in t or
@@ -336,6 +334,11 @@ def is_explicit_post(post: dict, post_tags: set) -> bool:
     ):
         return True
     return False
+
+
+def is_explicit_post(post: dict, post_tags: set) -> bool:
+    """Определяет, является ли пост откровенным (18+ / нагота / половой акт)."""
+    return is_full_nudity_or_sex(post, post_tags)
 
 
 class DeckGenerator:
@@ -617,13 +620,14 @@ class DeckGenerator:
                 if filter_weird_fetishes and any(is_weird_fetish_tag(t) for t in post_tags):
                     continue
 
-                # 4. Фильтр откровенности контента (полный откровенный 18+ vs лайтовый/закрытый)
+                # 4. Фильтр откровенности контента (полный откровенный 18+ vs горячий SFW без наготы)
                 if content_mode == "light":
-                    if is_explicit_post(post, post_tags):
+                    # Горячий контент, но строго без полной наготы и половых актов
+                    if is_full_nudity_or_sex(post, post_tags):
                         continue
                 elif content_mode == "explicit":
                     rating = str(post.get("rating", "")).lower()
-                    if rating in ("safe", "s", "general") and not is_explicit_post(post, post_tags):
+                    if rating in ("safe", "s", "general") and not is_full_nudity_or_sex(post, post_tags):
                         continue
 
                 # 4. Фильтрация по годам
