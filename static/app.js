@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const totalCardsRange = document.getElementById("total_cards_range");
   const totalCardsNum = document.getElementById("total_cards_num");
   const cardResolutionSelect = document.getElementById("card_resolution");
+  const threadsCountSelect = document.getElementById("threads_count");
   const yearFromInput = document.getElementById("year_from");
   const yearToInput = document.getElementById("year_to");
   const btnResetYears = document.getElementById("btn-reset-years");
@@ -154,6 +155,7 @@ document.addEventListener("DOMContentLoaded", () => {
       year_to: yearToInput.value ? parseInt(yearToInput.value, 10) : null,
       card_width: cardW,
       card_height: cardH,
+      threads: threadsCountSelect ? parseInt(threadsCountSelect.value, 10) : 8,
       deck_title: deckTitleInput.value.trim() || "CUSTOM DECK"
     };
 

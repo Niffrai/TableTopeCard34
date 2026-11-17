@@ -85,6 +85,7 @@ def generation_worker(params: dict):
         source = params.get("source", "xbooru")
         rule34_user_id = params.get("rule34_user_id", "")
         rule34_api_key = params.get("rule34_api_key", "")
+        threads = int(params.get("threads", 8))
 
         res = generator.generate_deck(
             positive_tags=pos_tags,
@@ -99,6 +100,7 @@ def generation_worker(params: dict):
             source=source,
             rule34_user_id=rule34_user_id,
             rule34_api_key=rule34_api_key,
+            threads=threads,
             progress_callback=on_progress
         )
 

@@ -1,3 +1,4 @@
+import concurrent.futures
 import hashlib
 import json
 import math
@@ -5,6 +6,7 @@ import os
 import random
 import re
 import shutil
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -573,6 +575,7 @@ class DeckGenerator:
         source: str = "xbooru",
         rule34_user_id: Optional[str] = None,
         rule34_api_key: Optional[str] = None,
+        threads: int = 8,
         progress_callback: Optional[Callable[[dict], None]] = None
     ) -> dict:
         self.is_running = True
@@ -653,68 +656,117 @@ class DeckGenerator:
         new_content_md5s = []
         new_visual_hashes = []
 
-        for char_name, target_count, candidate_posts in pools_by_char:
-            if self.should_stop or len(processed_cards) >= total_cards:
-                break
+        max_workers = max(1, min(int(threads or 8), 16))
 
-            char_label = char_name if char_name else "Колода"
-            downloaded_for_char = 0
+        def _fetch_candidate(post_item):
+            if self.should_stop:
+                return None
+            f_url = post_item.get("file_url")
+            if not f_url:
+                return None
+            try:
+                b_data = self._http_download_bytes(f_url)
+                c_md5 = hashlib.md5(b_data).hexdigest()
+                r_img = Image.open(BytesIO(b_data)).convert("RGB")
+                dh = calculate_dhash(r_img)
+                return {
+                    "post": post_item,
+                    "content_md5": c_md5,
+                    "raw_img": r_img,
+                    "v_hash": dh
+                }
+            except Exception:
+                return None
 
-            for post in candidate_posts:
-                if self.should_stop or downloaded_for_char >= target_count or len(processed_cards) >= total_cards:
+        report(f"Параллельное скачивание карт (потоков: {max_workers})...", 10)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            for char_name, target_count, candidate_posts in pools_by_char:
+                if self.should_stop or len(processed_cards) >= total_cards:
                     break
 
-                file_url = post.get("file_url")
-                if not file_url:
-                    continue
+                char_label = char_name if char_name else "Колода"
+                downloaded_for_char = 0
+                post_iter = iter(candidate_posts)
+                futures = set()
 
-                current_total = len(processed_cards)
-                pct = 10 + int((current_total / total_cards) * 78)
+                # Наполняем начальное окно задач для текущего персонажа
+                initial_batch = min(len(candidate_posts), max_workers * 2)
+                for _ in range(initial_batch):
+                    try:
+                        p = next(post_iter)
+                        futures.add(executor.submit(_fetch_candidate, p))
+                    except StopIteration:
+                        break
 
-                if current_total % 5 == 0 or current_total == total_cards - 1:
-                    report(f"Обработка карты {current_total + 1}/{total_cards} ({char_label})...", pct)
+                while futures and downloaded_for_char < target_count and len(processed_cards) < total_cards:
+                    if self.should_stop:
+                        for f in futures:
+                            f.cancel()
+                        break
 
-                try:
-                    img_data = self._http_download_bytes(file_url)
+                    done, futures = concurrent.futures.wait(
+                        futures,
+                        return_when=concurrent.futures.FIRST_COMPLETED
+                    )
 
-                    # Проверка MD5 (текущей колоды и истории)
-                    content_md5 = hashlib.md5(img_data).hexdigest()
-                    if content_md5 in seen_content_md5s or content_md5 in self.history["seen_content_md5s"]:
-                        duplicate_count += 1
-                        continue
+                    for f in done:
+                        if self.should_stop or downloaded_for_char >= target_count or len(processed_cards) >= total_cards:
+                            break
 
-                    raw_img = Image.open(BytesIO(img_data)).convert("RGB")
+                        res = f.result()
+                        if not res:
+                            continue
 
-                    # Проверка визуального хэша dHash (текущей колоды и истории)
-                    v_hash = calculate_dhash(raw_img)
-                    all_visual_hashes = seen_visual_hashes + self.history["seen_visual_hashes"]
-                    if is_visual_duplicate(v_hash, all_visual_hashes, threshold=4):
-                        duplicate_count += 1
-                        continue
+                        # 1. Проверка MD5 (текущая колода + история)
+                        c_md5 = res["content_md5"]
+                        if c_md5 in seen_content_md5s or c_md5 in self.history["seen_content_md5s"]:
+                            duplicate_count += 1
+                            continue
 
-                    seen_content_md5s.add(content_md5)
-                    seen_visual_hashes.append(v_hash)
+                        # 2. Проверка визуального хэша dHash (текущая колода + история)
+                        dh = res["v_hash"]
+                        all_visual_hashes = seen_visual_hashes + self.history["seen_visual_hashes"]
+                        if is_visual_duplicate(dh, all_visual_hashes, threshold=4):
+                            duplicate_count += 1
+                            continue
 
-                    if post.get("id"):
-                        new_post_ids.append(post["id"])
-                    if post.get("hash"):
-                        new_api_hashes.append(post["hash"])
-                    new_content_md5s.append(content_md5)
-                    new_visual_hashes.append(v_hash)
+                        # Карта уникальна!
+                        seen_content_md5s.add(c_md5)
+                        seen_visual_hashes.append(dh)
 
-                    card_img = ImageOps.fit(raw_img, (card_width, card_height), Image.Resampling.LANCZOS)
-                    processed_cards.append(card_img)
-                    downloaded_for_char += 1
+                        post = res["post"]
+                        if post.get("id"):
+                            new_post_ids.append(post["id"])
+                        if post.get("hash"):
+                            new_api_hashes.append(post["hash"])
+                        new_content_md5s.append(c_md5)
+                        new_visual_hashes.append(dh)
 
-                    # Сохраняем индивидуальную фотографию
-                    card_num = len(processed_cards)
-                    photo_file = os.path.join(photos_dir, f"photo_{card_num:03d}.jpg")
-                    card_img.save(photo_file, "JPEG", quality=95)
+                        card_img = ImageOps.fit(res["raw_img"], (card_width, card_height), Image.Resampling.LANCZOS)
+                        processed_cards.append(card_img)
+                        downloaded_for_char += 1
 
-                except Exception:
-                    continue
+                        # Сохраняем индивидуальное фото
+                        card_num = len(processed_cards)
+                        photo_file = os.path.join(photos_dir, f"photo_{card_num:03d}.jpg")
+                        card_img.save(photo_file, "JPEG", quality=95)
 
-                time.sleep(0.04)
+                        pct = 10 + int((card_num / total_cards) * 78)
+                        if card_num % 5 == 0 or card_num == total_cards or downloaded_for_char == target_count:
+                            report(f"Скачано: {card_num}/{total_cards} карт ({char_label}: {downloaded_for_char}/{target_count}) [⚡ {max_workers} потоков]...", pct)
+
+                    # Добавляем в окно новые задачи, если карточек для персонажа ещё не хватает
+                    while len(futures) < (max_workers * 2) and downloaded_for_char < target_count and len(processed_cards) < total_cards and not self.should_stop:
+                        try:
+                            p = next(post_iter)
+                            futures.add(executor.submit(_fetch_candidate, p))
+                        except StopIteration:
+                            break
+
+                # Отменяем незавершённые задачи для текущего пула перед переходом к следующему
+                for f in futures:
+                    f.cancel()
 
         if duplicate_count > 0:
             report(f"Отфильтровано дубликатов: {duplicate_count}", 89)

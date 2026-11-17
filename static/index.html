@@ -117,7 +117,7 @@
             </div>
           </div>
 
-          <!-- Количество карт и размер -->
+          <!-- Количество карт, разрешение и параллельность -->
           <div class="form-row">
             <div class="form-group flex-1">
               <div class="label-row">
@@ -134,6 +134,16 @@
                 <option value="300x420" selected>300 × 420 (Быстрая загрузка в игре)</option>
                 <option value="400x560">400 × 560 (Повышенная чёткость)</option>
                 <option value="500x700">500 × 700 (HD качество)</option>
+              </select>
+            </div>
+
+            <div class="form-group flex-1">
+              <label for="threads_count">Параллельность (потоки)</label>
+              <select id="threads_count">
+                <option value="8" selected>8 потоков (Быстро — Рекомендуется)</option>
+                <option value="12">12 потоков (Турбо-скорость)</option>
+                <option value="4">4 потока (Стабильная)</option>
+                <option value="1">1 поток (По очереди)</option>
               </select>
             </div>
           </div>
