@@ -108,18 +108,24 @@
 
           <!-- Отрицательные теги -->
           <div class="form-group">
-            <label for="negative_tags">
-              Отрицательные теги
-              <button type="button" class="info-btn" data-tooltip="Исключить нежелательные теги из колоды (например: comic, bad_anatomy, lowres, 3d, text). Посты с этими тегами автоматически отбрасываются.">i</button>
-            </label>
-            <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text" placeholder="comic, 3d, text, watermark">
+            <div class="label-row">
+              <label for="negative_tags">
+                Отрицательные теги
+                <button type="button" class="info-btn" data-tooltip="Исключить нежелательные теги из колоды. Программа автоматически блокирует шок-контент (беременность, изнасилование, расчленение, гуро, увечья, копро, рвота, зоофилия). Вы также можете дописать сюда любые свои теги.">i</button>
+              </label>
+              <span class="badge-subtle" title="Автоматический фильтр шок-контента, расчленения, насилия и копро активен" style="color: #34d399; border-color: rgba(16, 185, 129, 0.3);">🛡️ Защита от шок-контента</span>
+            </div>
+            <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text, pregnant, rape, guro, gore, dismemberment, scat" placeholder="comic, 3d, text, watermark">
             <div class="quick-chips">
               <span class="chip-label">Быстро:</span>
               <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="comic">- comic</button>
               <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="bad_anatomy">- bad_anatomy</button>
               <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="lowres">- lowres</button>
               <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="3d">- 3d</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="text">- text</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="ugly_bastard">- ugly_bastard</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="guro">- guro</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="rape">- rape</button>
+              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="pregnant">- pregnant</button>
             </div>
           </div>
 

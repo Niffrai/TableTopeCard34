@@ -249,6 +249,42 @@ def create_dark_anime_skybox(output_path: str):
     final_img.save(output_path, "JPEG", quality=92)
 
 
+def is_disgusting_post_tag(tag: str) -> bool:
+    """Проверяет тег на принадлежность к отвратительному контенту (гуро, насилие, копро, беременность и т.д.)."""
+    t = tag.lower()
+    # 1. Беременность, инфлейшн и оплодотворение
+    if any(sub in t for sub in ("pregnant", "pregnancy", "impregnat", "belly_expansion", "stomach_deformation", "oviposition", "hyper_pregnancy")):
+        return True
+    # 2. Изнасилование, принуждение и недобровольное насилие
+    if t in ("rape", "forced", "non-con", "non-consensual", "gang_rape", "molestation", "somnophilia", "mind_break"):
+        return True
+    if t.startswith("rape_") or t.endswith("_rape") or "_rape_" in t or "gangrape" in t:
+        return True
+    # 3. Расчленение, гуро, увечья, трупы, каннибализм, снафф
+    if any(sub in t for sub in ("guro", "dismember", "decapitat", "amput", "mutilat", "necrophil", "snuff", "cannibal", "viscera", "corpse", "torture")):
+        return True
+    if t in ("gore", "dead", "blood", "bloody", "bloodshed", "internal_organs", "wound", "wounded"):
+        return True
+    if t.startswith("blood_") or t.endswith("_blood"):
+        return True
+    # 4. Копро, рвота, экскременты, золотой дождь
+    if t in ("scat", "feces", "poop", "defecation", "coprophagia", "watersports", "urination", "enema", "soiled", "diaper"):
+        return True
+    if t.startswith("scat_") or t.endswith("_scat") or "_scat_" in t:
+        return True
+    if any(sub in t for sub in ("vomit", "fecal", "defecat", "coprophag", "watersport")):
+        return True
+    # 5. Зоофилия и животные
+    if any(sub in t for sub in ("bestialit", "zoophil")):
+        return True
+    if t in ("bestiality", "zoophilia"):
+        return True
+    # 6. Отвратительные персонажи и паразиты
+    if any(sub in t for sub in ("ugly_bastard", "parasite", "maggots", "hard_vore")):
+        return True
+    return False
+
+
 class DeckGenerator:
     def __init__(self, output_dir: str, history_file: Optional[str] = None):
         self.output_dir = output_dir
@@ -500,9 +536,9 @@ class DeckGenerator:
                     skipped_from_history += 1
                     continue
 
-                # 3. Фильтрация по отрицательным тегам
+                # 3. Фильтрация по отрицательным тегам и авто-блокировка шок-контента (гуро, насилие, копро, беременность)
                 post_tags = set(post.get("tags", "").lower().split())
-                if post_tags.intersection(cleaned_negatives):
+                if post_tags.intersection(cleaned_negatives) or any(is_disgusting_post_tag(t) for t in post_tags):
                     continue
 
                 # 4. Фильтрация по годам
