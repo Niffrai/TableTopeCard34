@@ -314,21 +314,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (contentModeBadge) {
       if (mode === "explicit") {
-        contentModeBadge.textContent = "Explicit 18+";
+        contentModeBadge.textContent = "🔥 Полный 18+";
         contentModeBadge.className = "badge-subtle badge-mode-explicit";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, nude, explicit";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else if (mode === "light") {
-        contentModeBadge.textContent = "Горячий SFW (Без наготы)";
+        contentModeBadge.textContent = "🌸 Горячий SFW (Без наготы)";
         contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, -rating:explicit";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else {
-        contentModeBadge.textContent = "Сбалансированный";
+        contentModeBadge.textContent = "✨ Сбалансированный";
         contentModeBadge.className = "badge-subtle badge-mode-balanced";
         if (updateInputs) {
           posTagsInput.value = "highres, solo";
