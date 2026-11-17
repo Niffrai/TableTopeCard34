@@ -237,7 +237,7 @@ def get_tts_decks() -> list[dict]:
                     decks.append({
                         "id": f"game:{fname}",
                         "type": "game",
-                        "type_label": "🎮 Игра (Save & Load)",
+                        "type_label": "Игра (Save & Load)",
                         "filename": fname,
                         "name": save_name,
                         "date": date_str,
@@ -294,7 +294,7 @@ def get_tts_decks() -> list[dict]:
                         decks.append({
                             "id": f"saved_object:{fname}",
                             "type": "saved_object",
-                            "type_label": "📦 Saved Object",
+                            "type_label": "Saved Object",
                             "filename": fname,
                             "name": save_name,
                             "date": date_str,
@@ -467,7 +467,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                     "========================================================================\r\n\r\n"
                     "СПОСОБ 1 (САМЫЙ ПРОСТОЙ — ЕСЛИ У ВАС ЕСТЬ ЭТО ПРИЛОЖЕНИЕ):\r\n"
                     "1. Запустите программу Tabletop Simulator Deck Builder (run.bat).\r\n"
-                    "2. Нажмите кнопку «📥 Импортировать от друга» в верхней шапке.\r\n"
+                    "2. Нажмите кнопку «Импорт архива» в верхней шапке.\r\n"
                     "3. Выберите этот ZIP-архив.\r\n"
                     "   Приложение САМО распакует все файлы в ваш Tabletop Simulator,\r\n"
                     "   пропишет пути к текстурам стола Tier List, колоды и стилизованного тёмного фона.\r\n"

@@ -23,17 +23,32 @@ BOORU_SOURCES = {
     "xbooru": {
         "name": "Xbooru (Без API ключей / NSFW)",
         "api_url": "https://xbooru.com/index.php",
+        "api_type": "gelbooru",
+        "requires_auth": False
+    },
+    "yande": {
+        "name": "Yande.re (Высокое качество / Аниме)",
+        "api_url": "https://yande.re/post.json",
+        "api_type": "moebooru",
+        "requires_auth": False
+    },
+    "konachan": {
+        "name": "Konachan (Обои и арт)",
+        "api_url": "https://konachan.com/post.json",
+        "api_type": "moebooru",
+        "requires_auth": False
+    },
+    "safebooru": {
+        "name": "Safebooru (SFW / Без 18+)",
+        "api_url": "https://safebooru.org/index.php",
+        "api_type": "gelbooru",
         "requires_auth": False
     },
     "rule34": {
         "name": "Rule34.xxx (Требует User ID и API Key)",
         "api_url": "https://api.rule34.xxx/index.php",
+        "api_type": "gelbooru",
         "requires_auth": True
-    },
-    "safebooru": {
-        "name": "Safebooru (SFW / Без 18+)",
-        "api_url": "https://safebooru.org/index.php",
-        "requires_auth": False
     }
 }
 
@@ -154,7 +169,7 @@ def create_tier_table_image(output_path: str):
     ds_y1 = deck_center_y - deck_slot_h // 2
     ds_y2 = ds_y1 + deck_slot_h
     draw.rounded_rectangle([ds_x1, ds_y1, ds_x2, ds_y2], radius=10, fill=(34, 40, 56), outline=(220, 180, 70), width=2)
-    draw.text(((ds_x1 + ds_x2) // 2, deck_center_y), "🎴 DRAW HERE", fill=(220, 180, 70), font=font_sub, anchor="mm")
+    draw.text(((ds_x1 + ds_x2) // 2, deck_center_y), "DRAW HERE", fill=(220, 180, 70), font=font_sub, anchor="mm")
 
     img.save(output_path, "PNG")
 
@@ -538,6 +553,9 @@ class DeckGenerator:
         source_info = BOORU_SOURCES[source_key]
         api_url = source_info["api_url"]
 
+        api_type = source_info.get("api_type", "gelbooru")
+        moebooru_ignored = {"highres", "solo", "1girl", "video", "-video"}
+
         api_query_tags = []
         if character:
             clean_char = character.strip().lower().replace(" ", "_")
@@ -545,19 +563,33 @@ class DeckGenerator:
 
         for tag in positive_tags:
             tag = tag.strip().lower().replace(" ", "_")
-            if tag and tag not in api_query_tags and len(api_query_tags) < 3:
+            if not tag:
+                continue
+            if api_type == "moebooru" and tag in moebooru_ignored:
+                continue
+            if tag not in api_query_tags and len(api_query_tags) < 3:
                 api_query_tags.append(tag)
 
-        # Для режима light (горячий SFW без 18+) на Booru гарантируем исключение рейтинга explicit
-        if content_mode == "light" and source_key in ("xbooru", "rule34"):
+        # Рейтинги и служебные теги для Moebooru и Gelbooru
+        if content_mode == "light":
             has_rating = any("rating:" in t for t in api_query_tags)
             if not has_rating:
                 if len(api_query_tags) >= 3:
                     api_query_tags.pop()
-                api_query_tags.append("-rating:explicit")
+                if api_type == "moebooru":
+                    api_query_tags.append("-rating:e")
+                else:
+                    api_query_tags.append("-rating:explicit")
+        elif content_mode == "explicit" and api_type == "moebooru":
+            if not any("rating:" in t for t in api_query_tags) and len(api_query_tags) < 3:
+                api_query_tags.append("rating:e")
 
-        if len(api_query_tags) < 3 and "-video" not in api_query_tags:
-            api_query_tags.append("-video")
+        if api_type == "moebooru":
+            if not character and len(api_query_tags) < 3 and "order:random" not in api_query_tags:
+                api_query_tags.append("order:random")
+        else:
+            if len(api_query_tags) < 3 and "-video" not in api_query_tags:
+                api_query_tags.append("-video")
 
         tags_query_str = " ".join(api_query_tags)
         char_label = character if character else "Случайный пул"
@@ -590,20 +622,29 @@ class DeckGenerator:
         switched_to_fallback = False
         skipped_from_history = 0
         consecutive_empty_pages = 0
+        api_type = source_info.get("api_type", "gelbooru")
+        base_netloc = urllib.parse.urlparse(api_url).netloc
 
         for pid in page_queue:
             if len(all_candidates) >= target_buffer or self.should_stop:
                 break
 
-            params = {
-                "page": "dapi",
-                "s": "post",
-                "q": "index",
-                "json": "1",
-                "tags": tags_query_str,
-                "limit": 100,
-                "pid": pid
-            }
+            if api_type == "moebooru":
+                params = {
+                    "page": pid + 1,
+                    "limit": 100,
+                    "tags": tags_query_str
+                }
+            else:
+                params = {
+                    "page": "dapi",
+                    "s": "post",
+                    "q": "index",
+                    "json": "1",
+                    "tags": tags_query_str,
+                    "limit": 100,
+                    "pid": pid
+                }
 
             if source_key == "rule34" and rule34_api_key and rule34_user_id:
                 params["api_key"] = rule34_api_key.strip()
@@ -619,12 +660,22 @@ class DeckGenerator:
             ) or (status_code in [401, 403] and source_key == "rule34")
 
             if is_auth_error and not switched_to_fallback:
-                log_callback("⚠️ Rule34.xxx требует API Key. Автоматически переключаюсь на Xbooru...")
+                log_callback("Rule34.xxx требует API Key. Автоматически переключаюсь на Xbooru...")
                 source_key = "xbooru"
-                api_url = BOORU_SOURCES["xbooru"]["api_url"]
+                source_info = BOORU_SOURCES["xbooru"]
+                api_url = source_info["api_url"]
+                api_type = source_info.get("api_type", "gelbooru")
+                base_netloc = urllib.parse.urlparse(api_url).netloc
                 switched_to_fallback = True
-                params.pop("api_key", None)
-                params.pop("user_id", None)
+                params = {
+                    "page": "dapi",
+                    "s": "post",
+                    "q": "index",
+                    "json": "1",
+                    "tags": tags_query_str,
+                    "limit": 100,
+                    "pid": pid
+                }
                 resp_data, status_code = self._http_get_json(api_url, params)
 
             if not isinstance(resp_data, list):
@@ -639,14 +690,14 @@ class DeckGenerator:
                 consecutive_empty_pages = 0
 
             for post in resp_data:
-                file_url = post.get("file_url")
+                file_url = post.get("file_url") or post.get("jpeg_url")
                 post_id = post.get("id")
-                api_hash = post.get("hash")
+                api_hash = post.get("hash") or post.get("md5")
 
                 if not file_url:
                     continue
 
-                file_url = self._normalize_file_url(file_url)
+                file_url = self._normalize_file_url(file_url, base_domain=base_netloc)
 
                 ext = os.path.splitext(file_url)[1].lower()
                 if ext not in [".jpg", ".jpeg", ".png"]:
@@ -866,7 +917,7 @@ class DeckGenerator:
         def _fetch_candidate(post_item):
             if self.should_stop:
                 return None
-            f_url = post_item.get("file_url")
+            f_url = post_item.get("file_url") or post_item.get("jpeg_url")
             if not f_url:
                 return None
             try:
@@ -948,8 +999,8 @@ class DeckGenerator:
                         post = res["post"]
                         if post.get("id"):
                             new_post_ids.append(post["id"])
-                        if post.get("hash"):
-                            new_api_hashes.append(post["hash"])
+                        if post.get("hash") or post.get("md5"):
+                            new_api_hashes.append(post.get("hash") or post.get("md5"))
                         new_content_md5s.append(c_md5)
                         new_visual_hashes.append(dh)
 
@@ -964,7 +1015,7 @@ class DeckGenerator:
 
                         pct = 10 + int((card_num / total_cards) * 78)
                         if card_num % 5 == 0 or card_num == total_cards or downloaded_for_char == target_count:
-                            report(f"Скачано: {card_num}/{total_cards} карт ({char_label}: {downloaded_for_char}/{target_count}) [⚡ {max_workers} потоков]...", pct)
+                            report(f"Скачано: {card_num}/{total_cards} карт ({char_label}: {downloaded_for_char}/{target_count}) [{max_workers} потоков]...", pct)
 
                     # Добавляем в окно новые задачи, если карточек для персонажа ещё не хватает
                     while len(futures) < (max_workers * 2) and downloaded_for_char < target_count and len(processed_cards) < total_cards and not self.should_stop:

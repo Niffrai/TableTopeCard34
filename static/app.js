@@ -252,13 +252,12 @@ document.addEventListener("DOMContentLoaded", () => {
     lastLogCount = 0;
   });
 
-  // --- 4.1. Управление щитами защиты (Шок-контент и Странные фетиши) ---
+  // --- 4.1. Управление переключателями защиты (Шок-контент и Странные фетиши) ---
   const shieldShockBtn = document.getElementById("shield-shock-btn");
   const shieldFetishBtn = document.getElementById("shield-fetish-btn");
 
   function setupShieldToggle(btn, storageKey, blockedText, allowedText) {
     if (!btn) return;
-    const icon = btn.querySelector(".shield-icon");
     const badge = btn.querySelector(".shield-badge");
 
     const saved = localStorage.getItem(storageKey);
@@ -267,7 +266,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function render() {
       btn.classList.toggle("active", isActive);
       btn.dataset.active = isActive ? "true" : "false";
-      if (icon) icon.textContent = isActive ? "🛡️" : "⚠️";
       if (badge) badge.textContent = isActive ? blockedText : allowedText;
     }
 
@@ -286,7 +284,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- 4.1.1. Второстепенный фильтр: Отсекать арты с пустым центром ---
   const filterEmptyCenterBtn = document.getElementById("filter-empty-center-btn");
   if (filterEmptyCenterBtn) {
-    const icon = filterEmptyCenterBtn.querySelector(".secondary-filter-icon");
     const badge = filterEmptyCenterBtn.querySelector(".secondary-filter-badge");
     const saved = localStorage.getItem("tts_filter_empty_center");
     let isActive = saved !== null ? saved === "true" : true;
@@ -294,7 +291,6 @@ document.addEventListener("DOMContentLoaded", () => {
     function renderEmptyCenter() {
       filterEmptyCenterBtn.classList.toggle("active", isActive);
       filterEmptyCenterBtn.dataset.active = isActive ? "true" : "false";
-      if (icon) icon.textContent = isActive ? "🎯" : "⚪";
       if (badge) badge.textContent = isActive ? "ВКЛ" : "ВЫКЛ";
     }
 
@@ -318,21 +314,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (contentModeBadge) {
       if (mode === "explicit") {
-        contentModeBadge.textContent = "🔥 Полный 18+";
+        contentModeBadge.textContent = "Explicit 18+";
         contentModeBadge.className = "badge-subtle badge-mode-explicit";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, nude, explicit";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else if (mode === "light") {
-        contentModeBadge.textContent = "🌸 Горячий SFW (Без наготы)";
+        contentModeBadge.textContent = "Горячий SFW (Без наготы)";
         contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, -rating:explicit";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else {
-        contentModeBadge.textContent = "✨ Сбалансированный";
+        contentModeBadge.textContent = "Сбалансированный";
         contentModeBadge.className = "badge-subtle badge-mode-balanced";
         if (updateInputs) {
           posTagsInput.value = "highres, solo";
@@ -454,7 +450,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`🎉 Успешно!\nСохранено как ИГРА (Слот #${data.save_num}):\n"${data.save_name}"\n\nКак открыть в игре:\n1. Запустите Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода уже готовы!`);
+        alert(`Успешно!\nСохранено как ИГРА (Слот #${data.save_num}):\n"${data.save_name}"\n\nКак открыть в игре:\n1. Запустите Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода уже готовы.`);
         loadInstalledDecks();
       } else {
         alert("Ошибка сохранения игры: " + data.error);
@@ -463,7 +459,7 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("Ошибка: " + err.message);
     } finally {
       btnSaveGame.disabled = false;
-      btnSaveGame.textContent = "🎮 Сохранить как ИГРУ (Games → Save & Load)";
+      btnSaveGame.textContent = "Сохранить как ИГРУ (Games → Save & Load)";
     }
   });
 
@@ -480,7 +476,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`📦 Успешно!\nОбъект сохранён в Saved Objects под именем:\n"${data.object_name}"\n\nКак использовать:\nВ Tabletop Simulator на любом столе откройте Objects -> Saved Objects и вытащите колоду! (Текстуры привязаны локально, карты больше не будут белыми).`);
+        alert(`Успешно!\nОбъект сохранён в Saved Objects под именем:\n"${data.object_name}"\n\nКак использовать:\nВ Tabletop Simulator на любом столе откройте Objects -> Saved Objects и вытащите колоду.`);
       } else {
         alert("Ошибка сохранения объекта: " + data.error);
       }
@@ -488,7 +484,7 @@ document.addEventListener("DOMContentLoaded", () => {
       alert("Ошибка: " + err.message);
     } finally {
       btnSaveObject.disabled = false;
-      btnSaveObject.textContent = "📦 Сохранить в Saved Objects";
+      btnSaveObject.textContent = "Сохранить в Saved Objects";
       loadInstalledDecks();
     }
   });
@@ -534,7 +530,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function loadInstalledDecks() {
     try {
       if (installedGrid) {
-        installedGrid.innerHTML = '<div style="color: var(--text-muted); padding: 30px; grid-column: 1/-1; text-align: center;">⏳ Загрузка списка колод...</div>';
+        installedGrid.innerHTML = '<div style="color: var(--text-muted); padding: 30px; grid-column: 1/-1; text-align: center;">Загрузка списка колод...</div>';
       }
       const res = await fetch("/api/tts-decks");
       const data = await res.json();
@@ -576,24 +572,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const thumbHtml = deck.thumbnail_url
         ? `<img src="${deck.thumbnail_url}" class="deck-card-img" alt="${deck.name}">`
-        : `<div class="deck-card-placeholder">🎴</div>`;
+        : `<div class="deck-card-placeholder">DECK</div>`;
 
       const typeBadgeClass = deck.type === "game" ? "game" : "object";
-      const typeLabel = deck.type === "game" ? "🎮 Игра (Save & Load)" : "📦 Saved Object";
+      const typeLabel = deck.type === "game" ? "Игра (Save & Load)" : "Saved Object";
 
       let metaPills = `
-        <span class="deck-meta-pill">🎴 Карт: <strong>${deck.card_count || '—'}</strong></span>
+        <span class="deck-meta-pill">Карт: <strong>${deck.card_count || '—'}</strong></span>
       `;
       if (deck.sheets_count) {
-        metaPills += `<span class="deck-meta-pill">📄 Листов: ${deck.sheets_count}</span>`;
+        metaPills += `<span class="deck-meta-pill">Листов: ${deck.sheets_count}</span>`;
       }
       if (deck.has_tier_table) {
-        metaPills += `<span class="deck-meta-pill" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.3);">🎨 Стол Tier List</span>`;
+        metaPills += `<span class="deck-meta-pill" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.3);">Стол Tier List</span>`;
       }
       if (deck.has_sky) {
-        metaPills += `<span class="deck-meta-pill" style="color: #a855f7; border-color: rgba(168, 85, 247, 0.3);">🌌 Тёмный фон</span>`;
+        metaPills += `<span class="deck-meta-pill" style="color: #a855f7; border-color: rgba(168, 85, 247, 0.3);">Тёмный фон</span>`;
       }
-      metaPills += `<span class="deck-meta-pill">📅 ${deck.date}</span>`;
+      metaPills += `<span class="deck-meta-pill">${deck.date}</span>`;
 
       card.innerHTML = `
         <div class="deck-card-top">
@@ -608,7 +604,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="deck-card-footer">
             <span class="deck-file-text" title="${deck.filename}">${deck.filename}</span>
             <button class="deck-delete-btn" data-type="${deck.type}" data-filename="${deck.filename}" data-name="${deck.name}">
-              🗑️ Удалить
+              Удалить
             </button>
           </div>
         </div>
@@ -633,12 +629,12 @@ document.addEventListener("DOMContentLoaded", () => {
           } else {
             alert("Ошибка удаления: " + resp.message);
             delBtn.disabled = false;
-            delBtn.textContent = "🗑️ Удалить";
+            delBtn.textContent = "Удалить";
           }
         } catch (err) {
           alert("Ошибка сети: " + err.message);
           delBtn.disabled = false;
-          delBtn.textContent = "🗑️ Удалить";
+          delBtn.textContent = "Удалить";
         }
       });
 
@@ -662,7 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnDeleteAllDecks) {
     btnDeleteAllDecks.addEventListener("click", async () => {
-      if (!confirm("Вы действительно хотите удалить ВСЕ созданные генератором колоды из Tabletop Simulator? (Ваши личные сохранения затронуты не будут).")) {
+      if (!confirm("Вы действительно хотите удалить все созданные генератором колоды из Tabletop Simulator? (Ваши личные сохранения затронуты не будут).")) {
         return;
       }
       btnDeleteAllDecks.disabled = true;
@@ -671,7 +667,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch("/api/delete-all-tts-decks", { method: "POST" });
         const data = await res.json();
         if (data.success) {
-          alert(`🗑️ Очистка завершена!\nУдалено игр: ${data.deleted_games}\nУдалено объектов: ${data.deleted_objects}`);
+          alert(`Очистка завершена!\nУдалено игр: ${data.deleted_games}\nУдалено объектов: ${data.deleted_objects}`);
           loadInstalledDecks();
         } else {
           alert("Ошибка: " + data.error);
@@ -680,7 +676,7 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("Ошибка сети: " + e.message);
       } finally {
         btnDeleteAllDecks.disabled = false;
-        btnDeleteAllDecks.textContent = "🗑️ Очистить все колоды из TTS";
+        btnDeleteAllDecks.textContent = "Очистить все колоды из TTS";
       }
     });
   }
@@ -796,9 +792,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     result.sheets.forEach((sheet, idx) => {
       const item = document.createElement("div");
-      item.style.cssText = "background: var(--bg-input); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-sm); display: flex; justify-content: space-between; align-items: center; font-size: 12px;";
+      item.style.cssText = "background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 8px 12px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;";
       item.innerHTML = `
-        <span>📄 <strong>Лист #${idx + 1}</strong> (${sheet.filename})</span>
+        <span><strong>Лист #${idx + 1}</strong> (${sheet.filename})</span>
         <span style="color: var(--text-muted);">Сетка: ${sheet.width}x${sheet.height} | Карт: <strong>${sheet.card_count}</strong></span>
       `;
       sheetsList.appendChild(item);
@@ -833,7 +829,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       btnImportZip.disabled = true;
-      btnImportZip.textContent = "⏳ Импорт...";
+      btnImportZip.textContent = "Импорт...";
 
       const reader = new FileReader();
       reader.onload = async () => {
@@ -849,7 +845,7 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           const data = await res.json();
           if (data.success) {
-            alert(`🎉 Колода от друга успешно импортирована!\n\nСоздано сохранение игры Tabletop Simulator: #${data.save_num}\nФайл: "${data.save_file}" (${data.save_name})\n\n🎮 Как открыть в Tabletop Simulator:\n1. Запустите игру Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода друга появятся на столе без белых текстур!`);
+            alert(`Колода от друга успешно импортирована!\n\nСоздано сохранение игры Tabletop Simulator: #${data.save_num}\nФайл: "${data.save_file}" (${data.save_name})\n\nКак открыть в Tabletop Simulator:\n1. Запустите игру Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода друга появятся на столе без белых текстур.`);
             loadInstalledDecks();
           } else {
             alert("Ошибка импорта архива: " + (data.error || "Неизвестная ошибка"));
@@ -858,7 +854,7 @@ document.addEventListener("DOMContentLoaded", () => {
           alert("Сетевая ошибка при импорте: " + err.message);
         } finally {
           btnImportZip.disabled = false;
-          btnImportZip.textContent = "📥 Импортировать от друга";
+          btnImportZip.textContent = "Импорт архива";
           friendZipInput.value = "";
         }
       };
@@ -866,7 +862,7 @@ document.addEventListener("DOMContentLoaded", () => {
       reader.onerror = () => {
         alert("Не удалось прочитать выбранный файл.");
         btnImportZip.disabled = false;
-        btnImportZip.textContent = "📥 Импортировать от друга";
+        btnImportZip.textContent = "Импорт архива";
       };
 
       reader.readAsDataURL(file);

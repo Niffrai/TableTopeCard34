@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TTS Card Deck Builder</title>
+  <title>TableTopCard34 | Deck Builder</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,36 +11,46 @@
 </head>
 <body>
   <div class="app-container">
-    <!-- Шапка -->
+    <!-- Шапка приложения -->
     <header class="app-header">
-      <div class="logo-area">
-        <div class="logo-icon">🎴</div>
-        <div>
-          <h1>Tabletop Simulator <span class="accent-text">Deck Builder</span></h1>
-          <p class="subtitle">Автоматический сборщик колод для Tabletop Simulator (до 1024 карт)</p>
+      <div class="brand-area">
+        <div class="brand-mark">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+            <line x1="9" y1="21" x2="9" y2="9"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title-row">
+            <span class="brand-name">TableTopCard34</span>
+            <span class="version-tag">v1.0.0</span>
+          </div>
+          <p class="brand-subtitle">Генератор и менеджер колод Tabletop Simulator</p>
         </div>
       </div>
+
       <div class="header-actions">
-        <div class="history-chip-group" title="Количество запомненных карт в базе history.json (они исключаются из новых колод)">
-          <span class="history-badge">🧠 В истории: <strong id="history-count">0</strong> карт</span>
+        <div class="history-chip-group" title="Количество запомненных карт в базе history.json (исключаются из новых колод)">
+          <span class="history-badge">В истории: <strong id="history-count">0</strong> карт</span>
           <button type="button" id="btn-clear-history" class="btn-clear-history-pill" title="Очистить базу history.json">
-            🗑️ Очистить
+            Очистить
           </button>
         </div>
         <input type="file" id="friend-zip-input" accept=".zip" class="hidden">
-        <button id="btn-import-zip" class="btn btn-primary btn-sm" title="Импортировать ZIP-архив с колодой от друга">📥 Импортировать от друга</button>
-        <button id="btn-show-guide" class="btn btn-ghost btn-sm" title="Инструкция: как передать колоду другу">❓ Подсказка для друга</button>
-        <button id="btn-open-folder" class="btn btn-secondary btn-sm" title="Открыть папку с файлами проекта">📁 Папка проекта</button>
+        <button id="btn-import-zip" class="btn btn-secondary btn-sm" title="Импортировать ZIP-архив с колодой от друга">Импорт архива</button>
+        <button id="btn-show-guide" class="btn btn-secondary btn-sm" title="Инструкция: как передать колоду другу">Справка</button>
+        <button id="btn-open-folder" class="btn btn-secondary btn-sm" title="Открыть папку с файлами проекта">Папка проекта</button>
       </div>
     </header>
 
     <!-- Вкладки приложения -->
     <nav class="app-tabs-nav">
       <button type="button" class="tab-btn active" data-tab="tab-generator">
-        <span class="tab-icon">⚡</span> Генератор колод
+        Генератор
       </button>
       <button type="button" class="tab-btn" data-tab="tab-installed">
-        <span class="tab-icon">📚</span> Вшитые колоды в TTS
+        Колоды в TTS
         <span id="installed-decks-badge" class="tab-badge">0</span>
       </button>
     </nav>
@@ -48,309 +58,319 @@
     <!-- Вкладка 1: Генератор колод -->
     <div id="tab-generator" class="tab-view active">
       <main class="main-grid">
-      <!-- Левая колонка: Настройки генерации -->
-      <section class="card config-card">
-        <h2 class="card-title">⚙️ Параметры генерации</h2>
-        
-        <form id="gen-form">
-          <!-- Источник изображений -->
-          <div class="form-group">
-            <div class="label-row">
-              <label for="booru_source">
-                Источник изображений
-                <button type="button" class="info-btn" data-tooltip="Xbooru — рекомендуется (NSFW, без регистрации и ключей). Rule34.xxx требует User ID и API Key. Safebooru — только SFW (без 18+).">i</button>
-              </label>
-              <span id="source-status-badge" class="badge-subtle">Без регистрации</span>
-            </div>
-            <select id="booru_source">
-              <option value="xbooru" selected>Xbooru (Без API ключей / NSFW - Рекомендуется)</option>
-              <option value="rule34">Rule34.xxx (Требует User ID и API Key)</option>
-              <option value="safebooru">Safebooru (SFW / Без 18+)</option>
-            </select>
+        <!-- Левая колонка: Параметры генерации -->
+        <section class="card config-card">
+          <div class="card-header-clean">
+            <h2 class="card-title">Параметры генерации</h2>
+            <span class="card-subtitle-subtle">Настройка источников, тегов и лимитов</span>
           </div>
-
-          <!-- Настройки авторизации Rule34 -->
-          <div id="rule34-auth-box" class="form-group auth-box hidden">
-            <div class="auth-box-title">
-              <span>🔑 Авторизация Rule34.xxx</span>
-              <button type="button" class="info-btn" data-tooltip="Зайдите в аккаунт на rule34.xxx/options → раздел API Access Credentials и скопируйте свой User ID и API Key.">i</button>
-            </div>
-            <div class="form-row-compact">
-              <input type="text" id="rule34_user_id" placeholder="User ID (например 123456)">
-              <input type="text" id="rule34_api_key" placeholder="API Key (токен)">
-            </div>
-          </div>
-
-          <!-- Уровень откровенности контента -->
-          <div class="form-group">
-            <div class="label-row">
-              <label>
-                Уровень откровенности
-                <button type="button" class="info-btn" data-tooltip="Уровень откровенности контента:&#10;🔥 Полный 18+ — откровенный контент (nude, explicit, без цензуры)&#10;✨ Сбалансированный — стандартный пин-ап / эччи / умеренный стиль&#10;🌸 Горячий SFW — горячий фансервис (эччи, бельё, купальники), но без полной наготы и секса">i</button>
-              </label>
-              <span id="content-mode-badge" class="badge-subtle badge-mode-explicit">🔥 Полный 18+</span>
-            </div>
-            <div class="content-mode-selector">
-              <button type="button" class="mode-btn active" data-mode="explicit">
-                <span class="mode-icon">🔥</span>
-              </button>
-
-              <button type="button" class="mode-btn" data-mode="balanced">
-                <span class="mode-icon">✨</span>
-              </button>
-
-              <button type="button" class="mode-btn" data-mode="light">
-                <span class="mode-icon">🌸</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Персонажи -->
-          <div class="form-group">
-            <div class="label-row">
-              <label for="characters">
-                Персонажи
-                <button type="button" class="info-btn" data-tooltip="Вводите имена персонажей через запятую или с новой строки. Карты будут распределены поровну между всеми указанными персонажами. Если оставить поле пустым — арты будут выбираться случайно.">i</button>
-              </label>
-              <span id="char-calc-badge" class="badge-subtle">Случайный пул</span>
-            </div>
-            <textarea id="characters" rows="2" placeholder="Например: 2B, Tifa Lockhart, Makima, Yennefer"></textarea>
-          </div>
-
-          <!-- Положительные теги -->
-          <div class="form-group">
-            <label for="positive_tags">
-              Положительные теги
-              <button type="button" class="info-btn" data-tooltip="Теги для поиска артов на Booru (через запятую). Первые подходящие теги отправляются в поисковый запрос к API.">i</button>
-            </label>
-            <input type="text" id="positive_tags" value="highres, solo, nude, explicit" placeholder="highres, solo, swimsuit, cosplay">
-            <div class="quick-chips">
-              <span class="chip-label">Быстро:</span>
-              <button type="button" class="chip" data-target="positive_tags" data-val="1girl">+ 1girl</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="nude">+ nude</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="clothed">+ clothed</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="swimsuit">+ swimsuit</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="highres">+ highres</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="score:>20">+ score:>20</button>
-            </div>
-          </div>
-
-          <!-- Отрицательные теги и Щиты защиты -->
-          <div class="form-group">
-            <div class="label-row">
-              <label for="negative_tags">
-                Отрицательные теги
-                <button type="button" class="info-btn" data-tooltip="Теги, которые нужно исключить из колоды. Нажмите на щиты ниже, чтобы снять или вернуть защиту от шок-контента или странных фетишей (гиперболизация, vore).">i</button>
-              </label>
-            </div>
-
-            <!-- 2 Интерактивных щита защиты (нажмите, чтобы снять / включить блокировку) -->
-            <div class="shield-badges-container">
-              <button type="button" id="shield-shock-btn" class="shield-btn active" data-active="true" title="Защита от расчленения, гуро, насилия, беременности и копро. Нажмите, чтобы снять/включить блокировку.">
-                <span class="shield-icon">🛡️</span>
-                <span class="shield-label">Шок-контент (гуро/насилие)</span>
-                <span class="shield-badge">ЗАБЛОКИРОВАН</span>
-              </button>
-
-              <button type="button" id="shield-fetish-btn" class="shield-btn active" data-active="true" title="Защита от гиперболизации пропорций, vore (поедание людей), инфляции. Нажмите, чтобы снять/включить блокировку.">
-                <span class="shield-icon">🛡️</span>
-                <span class="shield-label">Странные фетиши (гипер/vore)</span>
-                <span class="shield-badge">ЗАБЛОКИРОВАНЫ</span>
-              </button>
-            </div>
-
-            <!-- Второстепенный фильтр композиции -->
-            <div class="secondary-filters-container">
-              <button type="button" id="filter-empty-center-btn" class="secondary-filter-btn active" data-active="true">
-                <span class="secondary-filter-icon">🎯</span>
-                <span class="secondary-filter-label">Отсекать арты с пустым центром</span>
-                <span class="secondary-filter-badge">ВКЛ</span>
-              </button>
-              <button type="button" class="info-btn info-btn-sm" data-tooltip="Отсекает арты с пустым центром и персонажем на краю.">i</button>
-            </div>
-
-            <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text" placeholder="comic, 3d, text, watermark">
-            <div class="quick-chips">
-              <span class="chip-label">Быстро:</span>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="comic">- comic</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="bad_anatomy">- bad_anatomy</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="lowres">- lowres</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="3d">- 3d</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="ugly_bastard">- ugly_bastard</button>
-              <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="text">- text</button>
-            </div>
-          </div>
-
-          <!-- Блок: Всего карт в колоде (отдельный просторный блок со слайдером, пресетами и расчетом) -->
-          <div class="deck-size-card">
-            <div class="deck-size-top">
-              <div class="deck-size-label-wrap">
-                <label for="total_cards_range" class="mb-0">
-                  Всего карт в колоде
-                  <button type="button" class="info-btn" data-tooltip="Количество карт в колоде (от 10 до 1024). Карты нарезаются в листы сетками 10×7 (до 70 карт на лист). В игре Tabletop Simulator все листы собираются в единую цельную колоду!">i</button>
+          
+          <form id="gen-form">
+            <!-- Источник изображений -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="booru_source">
+                  Источник изображений
+                  <button type="button" class="info-btn" data-tooltip="Xbooru — рекомендуется (NSFW, без регистрации и ключей). Yande.re и Konachan — высокое качество и аниме арт (без ключей). Safebooru — только SFW. Rule34.xxx требует User ID и API Key.">i</button>
                 </label>
-                <span id="deck-sheets-calc" class="deck-sheets-badge">7 листов (6×70 + 36)</span>
+                <span id="source-status-badge" class="badge-subtle">Без регистрации</span>
               </div>
-              <div class="deck-size-input-wrap">
-                <input type="number" id="total_cards_num" min="10" max="1024" value="456">
-                <span class="cards-unit">карт</span>
-              </div>
-            </div>
-            <div class="range-wrapper">
-              <input type="range" id="total_cards_range" min="10" max="1024" step="1" value="456">
-              <div class="range-presets">
-                <button type="button" class="preset-chip" data-val="70">70 (1 лист)</button>
-                <button type="button" class="preset-chip" data-val="210">210 (3 листа)</button>
-                <button type="button" class="preset-chip active" data-val="456">456 (7 листов)</button>
-                <button type="button" class="preset-chip" data-val="700">700 (10 листов)</button>
-                <button type="button" class="preset-chip" data-val="1024">1024 (15 листов)</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Ряд: Разрешение карт + Параллельность (2 удобные колонки) -->
-          <div class="deck-params-row">
-            <div class="form-group mb-0">
-              <label for="card_resolution">
-                Разрешение карт
-                <button type="button" class="info-btn" data-tooltip="Разрешение одной карты. 300×420 — быстрый рендеринг и плавная игра в TTS без лагов памяти. 400×560 и 500×700 дают больше деталей, но итоговые листы весят больше.">i</button>
-              </label>
-              <select id="card_resolution">
-                <option value="300x420" selected>300 × 420 (Быстрая загрузка)</option>
-                <option value="400x560">400 × 560 (Повышенная чёткость)</option>
-                <option value="500x700">500 × 700 (HD качество)</option>
+              <select id="booru_source">
+                <option value="xbooru" selected>Xbooru (Без API ключей / NSFW — Рекомендуется)</option>
+                <option value="yande">Yande.re (Высокое качество / Аниме)</option>
+                <option value="konachan">Konachan (Обои и арт)</option>
+                <option value="safebooru">Safebooru (SFW / Без 18+)</option>
+                <option value="rule34">Rule34.xxx (Требует User ID и API Key)</option>
               </select>
             </div>
 
-            <div class="form-group mb-0">
-              <label for="threads_count">
-                Параллельность (потоки)
-                <button type="button" class="info-btn" data-tooltip="Количество одновременных потоков скачивания изображений. 8 потоков ускоряют загрузку в ~8 раз. 12 потоков рекомендуется для больших колод (на 456–1024 карты).">i</button>
+            <!-- Настройки авторизации Rule34 -->
+            <div id="rule34-auth-box" class="form-group auth-box hidden">
+              <div class="auth-box-title">
+                <span>Авторизация Rule34.xxx</span>
+                <button type="button" class="info-btn" data-tooltip="В аккаунте на rule34.xxx/options скопируйте свой User ID и API Key из раздела API Access Credentials.">i</button>
+              </div>
+              <div class="form-row-compact">
+                <input type="text" id="rule34_user_id" placeholder="User ID">
+                <input type="text" id="rule34_api_key" placeholder="API Key">
+              </div>
+            </div>
+
+            <!-- Уровень откровенности контента -->
+            <div class="form-group">
+              <div class="label-row">
+                <label>
+                  Уровень откровенности
+                  <button type="button" class="info-btn" data-tooltip="Уровень откровенности контента:&#10;Explicit 18+ — полный откровенный контент (nude, explicit, без цензуры)&#10;Сбалансированный — стандартный пин-ап / умеренный стиль&#10;Горячий SFW — горячий фансервис (эччи, бельё, купальники), но без полной наготы и секса">i</button>
+                </label>
+                <span id="content-mode-badge" class="badge-subtle badge-mode-explicit">Explicit 18+</span>
+              </div>
+              <div class="content-mode-segmented">
+                <button type="button" class="mode-btn active" data-mode="explicit">
+                  Explicit 18+
+                </button>
+                <button type="button" class="mode-btn" data-mode="balanced">
+                  Сбалансированный
+                </button>
+                <button type="button" class="mode-btn" data-mode="light">
+                  Горячий SFW
+                </button>
+              </div>
+            </div>
+
+            <!-- Персонажи -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="characters">
+                  Персонажи
+                  <button type="button" class="info-btn" data-tooltip="Вводите имена персонажей через запятую или с новой строки. Карты будут распределены поровну между указанными персонажами. Если пусто — случайный выбор.">i</button>
+                </label>
+                <span id="char-calc-badge" class="badge-subtle">Случайный пул</span>
+              </div>
+              <textarea id="characters" rows="2" placeholder="Например: 2B, Tifa Lockhart, Makima, Yennefer"></textarea>
+            </div>
+
+            <!-- Положительные теги -->
+            <div class="form-group">
+              <label for="positive_tags">
+                Положительные теги
+                <button type="button" class="info-btn" data-tooltip="Теги для поискового запроса к Booru API (через запятую).">i</button>
               </label>
-              <select id="threads_count">
-                <option value="8" selected>8 потоков (Рекомендуется)</option>
-                <option value="12">12 потоков (Турбо-скорость)</option>
-                <option value="4">4 потока (Стабильная)</option>
-                <option value="1">1 поток (По очереди)</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Фильтр годов -->
-          <div class="form-group">
-            <label>
-              Фильтр по годам
-              <button type="button" class="info-btn" data-tooltip="Выборка артов по годам публикации на Booru. Оставьте поля пустыми, чтобы брать арты за любые доступные года.">i</button>
-            </label>
-            <div class="form-row-compact">
-              <div class="input-with-label">
-                <span>От:</span>
-                <input type="number" id="year_from" min="2005" max="2026" placeholder="Любой">
+              <input type="text" id="positive_tags" value="highres, solo, nude, explicit" placeholder="highres, solo, swimsuit">
+              <div class="quick-chips">
+                <span class="chip-label">Быстро:</span>
+                <button type="button" class="chip" data-target="positive_tags" data-val="1girl">+ 1girl</button>
+                <button type="button" class="chip" data-target="positive_tags" data-val="nude">+ nude</button>
+                <button type="button" class="chip" data-target="positive_tags" data-val="clothed">+ clothed</button>
+                <button type="button" class="chip" data-target="positive_tags" data-val="swimsuit">+ swimsuit</button>
+                <button type="button" class="chip" data-target="positive_tags" data-val="highres">+ highres</button>
+                <button type="button" class="chip" data-target="positive_tags" data-val="score:>20">+ score:>20</button>
               </div>
-              <div class="input-with-label">
-                <span>До:</span>
-                <input type="number" id="year_to" min="2005" max="2026" placeholder="Любой">
+            </div>
+
+            <!-- Отрицательные теги и Щиты защиты -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="negative_tags">
+                  Отрицательные теги
+                  <button type="button" class="info-btn" data-tooltip="Теги, которые нужно исключить из колоды. Нажмите на переключатели ниже для управления блокировкой нежелательного контента.">i</button>
+                </label>
               </div>
-              <button type="button" id="btn-reset-years" class="btn btn-ghost btn-xs">Сбросить</button>
+
+              <!-- Переключатели защиты -->
+              <div class="shield-badges-container">
+                <button type="button" id="shield-shock-btn" class="shield-btn active" data-active="true" title="Защита от расчленения, насилия, беременности и копро. Нажмите для переключения.">
+                  <span class="shield-indicator"></span>
+                  <span class="shield-label">Шок-контент (гуро/насилие)</span>
+                  <span class="shield-badge">ЗАБЛОКИРОВАН</span>
+                </button>
+
+                <button type="button" id="shield-fetish-btn" class="shield-btn active" data-active="true" title="Защита от гиперболизации пропорций, vore, инфляции. Нажмите для переключения.">
+                  <span class="shield-indicator"></span>
+                  <span class="shield-label">Странные фетиши</span>
+                  <span class="shield-badge">ЗАБЛОКИРОВАНЫ</span>
+                </button>
+              </div>
+
+              <!-- Второстепенный фильтр композиции -->
+              <div class="secondary-filters-container">
+                <button type="button" id="filter-empty-center-btn" class="secondary-filter-btn active" data-active="true">
+                  <span class="filter-indicator"></span>
+                  <span class="secondary-filter-label">Отсекать арты с пустым центром</span>
+                  <span class="secondary-filter-badge">ВКЛ</span>
+                </button>
+                <button type="button" class="info-btn info-btn-sm" data-tooltip="Отсекает арты, где центр кадра пустой, а персонаж смещен к самому краю.">i</button>
+              </div>
+
+              <input type="text" id="negative_tags" value="comic, bad_anatomy, lowres, 3d, text" placeholder="comic, 3d, text, watermark">
+              <div class="quick-chips">
+                <span class="chip-label">Быстро:</span>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="comic">- comic</button>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="bad_anatomy">- bad_anatomy</button>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="lowres">- lowres</button>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="3d">- 3d</button>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="ugly_bastard">- ugly_bastard</button>
+                <button type="button" class="chip chip-neg" data-target="negative_tags" data-val="text">- text</button>
+              </div>
+            </div>
+
+            <!-- Блок: Всего карт в колоде -->
+            <div class="deck-size-card">
+              <div class="deck-size-top">
+                <div class="deck-size-label-wrap">
+                  <label for="total_cards_range" class="mb-0">
+                    Всего карт в колоде
+                    <button type="button" class="info-btn" data-tooltip="Количество карт (от 10 до 1024). Карты нарезаются в листы сетками 10×7 (до 70 карт на лист). В TTS собираются в единую цельную колоду.">i</button>
+                  </label>
+                  <span id="deck-sheets-calc" class="deck-sheets-badge">7 листов (6×70 + 36)</span>
+                </div>
+                <div class="deck-size-input-wrap">
+                  <input type="number" id="total_cards_num" min="10" max="1024" value="456">
+                  <span class="cards-unit">карт</span>
+                </div>
+              </div>
+              <div class="range-wrapper">
+                <input type="range" id="total_cards_range" min="10" max="1024" step="1" value="456">
+                <div class="range-presets">
+                  <button type="button" class="preset-chip" data-val="70">70 (1 лист)</button>
+                  <button type="button" class="preset-chip" data-val="210">210 (3 листа)</button>
+                  <button type="button" class="preset-chip active" data-val="456">456 (7 листов)</button>
+                  <button type="button" class="preset-chip" data-val="700">700 (10 листов)</button>
+                  <button type="button" class="preset-chip" data-val="1024">1024 (15 листов)</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Разрешение + Параллельность -->
+            <div class="deck-params-row">
+              <div class="form-group mb-0">
+                <label for="card_resolution">
+                  Разрешение карт
+                  <button type="button" class="info-btn" data-tooltip="Разрешение одной карты. 300×420 — быстрый рендеринг и плавная игра в TTS. 400×560 и 500×700 — больше деталей.">i</button>
+                </label>
+                <select id="card_resolution">
+                  <option value="300x420" selected>300 × 420 (Быстрая загрузка)</option>
+                  <option value="400x560">400 × 560 (Повышенная чёткость)</option>
+                  <option value="500x700">500 × 700 (HD качество)</option>
+                </select>
+              </div>
+
+              <div class="form-group mb-0">
+                <label for="threads_count">
+                  Параллельность (потоки)
+                  <button type="button" class="info-btn" data-tooltip="Количество одновременных потоков скачивания изображений. 8–12 потоков обеспечивают максимальную скорость.">i</button>
+                </label>
+                <select id="threads_count">
+                  <option value="8" selected>8 потоков (Рекомендуется)</option>
+                  <option value="12">12 потоков (Турбо-скорость)</option>
+                  <option value="4">4 потока (Стабильная)</option>
+                  <option value="1">1 поток (Последовательно)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Фильтр годов -->
+            <div class="form-group">
+              <label>
+                Фильтр по годам
+                <button type="button" class="info-btn" data-tooltip="Выборка по годам публикации. Оставьте пустыми для любых доступных лет.">i</button>
+              </label>
+              <div class="form-row-compact">
+                <div class="input-with-label">
+                  <span>От:</span>
+                  <input type="number" id="year_from" min="2005" max="2026" placeholder="Любой">
+                </div>
+                <div class="input-with-label">
+                  <span>До:</span>
+                  <input type="number" id="year_to" min="2005" max="2026" placeholder="Любой">
+                </div>
+                <button type="button" id="btn-reset-years" class="btn btn-secondary btn-xs">Сбросить</button>
+              </div>
+            </div>
+
+            <!-- Название колоды -->
+            <div class="form-group">
+              <label for="deck_title">
+                Название колоды
+                <button type="button" class="info-btn" data-tooltip="Название печатается на рубашке карт и отображается в игре Tabletop Simulator.">i</button>
+              </label>
+              <input type="text" id="deck_title" value="CUSTOM DECK" placeholder="Например: WAIFU DECK">
+            </div>
+
+            <!-- Кнопки запуска -->
+            <div class="action-buttons">
+              <button type="submit" id="btn-generate" class="btn btn-primary btn-block">
+                Создать колоду
+              </button>
+              <button type="button" id="btn-stop" class="btn btn-danger btn-block hidden">
+                Остановить процесс
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Правая колонка: Мониторинг выполнения -->
+        <section class="card monitor-card">
+          <div class="card-header-clean">
+            <h2 class="card-title">Мониторинг выполнения</h2>
+            <span class="card-subtitle-subtle">Статус процесса и готовые материалы</span>
+          </div>
+
+          <!-- Прогресс бар -->
+          <div class="progress-box">
+            <div class="progress-header">
+              <span id="status-text">Ожидание запуска...</span>
+              <span id="percent-text">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="progress-bar" class="progress-fill" style="width: 0%;"></div>
             </div>
           </div>
 
-          <!-- Название колоды -->
-          <div class="form-group">
-            <label for="deck_title">
-              Название колоды
-              <button type="button" class="info-btn" data-tooltip="Название будет напечатано на обратной стороне карт (рубашке) и отображаться в игре Tabletop Simulator.">i</button>
-            </label>
-            <input type="text" id="deck_title" value="CUSTOM DECK" placeholder="Например: WAIFU DECK">
+          <!-- Секция готового результата -->
+          <div id="result-box" class="result-box hidden">
+            <div class="result-alert">
+              <div class="result-mark">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div class="result-info">
+                <h3>Колода готова к использованию</h3>
+                <p id="result-summary">Создано 456 карт.</p>
+              </div>
+            </div>
+
+            <div class="result-actions">
+              <div class="result-actions-row">
+                <button id="btn-save-game" class="btn btn-primary flex-1">
+                  Сохранить как ИГРУ (Games → Save & Load)
+                </button>
+                <button id="btn-save-object" class="btn btn-secondary flex-1">
+                  Сохранить в Saved Objects
+                </button>
+              </div>
+              <div class="result-actions-row">
+                <button id="btn-export-zip" class="btn btn-secondary flex-1">
+                  Скачать ZIP-архив для друга (.zip)
+                </button>
+              </div>
+              <div class="result-actions-row">
+                <button id="btn-open-photos" class="btn btn-secondary flex-1">
+                  Папка с фото (photos)
+                </button>
+                <button id="btn-open-res-folder" class="btn btn-secondary flex-1">
+                  Папка с листами (output)
+                </button>
+              </div>
+            </div>
+
+            <div class="sheets-gallery-title">Сгенерированные листы колоды:</div>
+            <div id="sheets-list" class="sheets-list"></div>
           </div>
 
-          <!-- Кнопки запуска -->
-          <div class="action-buttons">
-            <button type="submit" id="btn-generate" class="btn btn-primary btn-block">
-              <span class="btn-icon">⚡</span> Создать колоду
-            </button>
-            <button type="button" id="btn-stop" class="btn btn-danger btn-block hidden">
-              ⛔ Остановить процесс
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <!-- Правая колонка: Прогресс и результат (БЕЗ показа картинок) -->
-      <section class="card monitor-card">
-        <h2 class="card-title">📡 Мониторинг выполнения</h2>
-
-        <!-- Прогресс бар -->
-        <div class="progress-box">
-          <div class="progress-header">
-            <span id="status-text">Ожидание запуска...</span>
-            <span id="percent-text">0%</span>
-          </div>
-          <div class="progress-track">
-            <div id="progress-bar" class="progress-fill" style="width: 0%;"></div>
-          </div>
-        </div>
-
-        <!-- Секция готового результата -->
-        <div id="result-box" class="result-box hidden">
-          <div class="result-alert">
-            <div class="result-icon">🎉</div>
-            <div class="result-info">
-              <h3>Колода готова к использованию!</h3>
-              <p id="result-summary">Создано 456 карт.</p>
+          <!-- Консоль логов -->
+          <div class="console-box">
+            <div class="console-header">
+              <span class="console-title">Консоль генерации</span>
+              <button id="btn-clear-logs" class="btn-text-xs">Очистить</button>
+            </div>
+            <div id="logs-container" class="logs-container">
+              <div class="log-line text-muted">[00:00:00] Готов к работе.</div>
             </div>
           </div>
-
-          <div class="result-actions" style="display: flex; flex-direction: column; gap: 10px;">
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button id="btn-save-game" class="btn btn-primary" style="flex: 1;">
-                🎮 Сохранить как ИГРУ (Games → Save & Load)
-              </button>
-              <button id="btn-save-object" class="btn btn-success" style="flex: 1;">
-                📦 Сохранить в Saved Objects
-              </button>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button id="btn-export-zip" class="btn btn-primary" style="flex: 1; background: #8b5cf6; border-color: #7c3aed;">
-                📦 Скачать ZIP-архив для друга (.zip)
-              </button>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-              <button id="btn-open-photos" class="btn btn-secondary" style="flex: 1;">
-                📷 Открыть папку с фото (photos)
-              </button>
-              <button id="btn-open-res-folder" class="btn btn-secondary" style="flex: 1;">
-                📂 Папка с листами (output)
-              </button>
-            </div>
-          </div>
-
-          <div class="sheets-gallery-title" style="margin-top: 15px;">Сгенерированные листы колоды:</div>
-          <div id="sheets-list" class="sheets-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
-        </div>
-
-        <!-- Консоль логов -->
-        <div class="console-box" style="margin-top: 20px;">
-          <div class="console-header">
-            <span>Логи выполнения</span>
-            <button id="btn-clear-logs" class="btn-text-xs">Очистить</button>
-          </div>
-          <div id="logs-container" class="logs-container" style="height: 280px;">
-            <div class="log-line text-muted">[00:00:00] Готов к работе.</div>
-          </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
 
       <!-- Подсказка по импорту в Tabletop Simulator -->
       <footer class="app-footer card">
-        <h3>💡 Как загрузить колоду в Tabletop Simulator:</h3>
+        <h3 class="footer-title">Как загрузить колоду в Tabletop Simulator:</h3>
         <ol class="instructions-list">
           <li>
-            <strong>Способ 1 — Как готовую ИГРУ (Рекомендуется):</strong> Нажмите синюю кнопку <em>«🎮 Сохранить как ИГРУ»</em>. В Tabletop Simulator выберите <code>Create → Singleplayer / Multiplayer → Games → Save & Load</code>. Игра откроется с кастомным столом <strong>Tier List (S, A+, A, B+, B, C+, C)</strong> и тёмным фоном, на котором в специальной зоне уже будет лежать готовая колода!
+            <strong>Способ 1 — Как готовую ИГРУ (Рекомендуется):</strong> Нажмите кнопку <em>«Сохранить как ИГРУ»</em>. В Tabletop Simulator выберите <code>Create → Singleplayer / Multiplayer → Games → Save & Load</code>. Игра откроется с кастомным столом <strong>Tier List (S, A+, A, B+, B, C+, C)</strong> и тёмным фоном, на котором в специальной зоне уже будет лежать готовая колода.
           </li>
           <li>
-            <strong>Способ 2 — Как ОБЪЕКТ:</strong> Нажмите зелёную кнопку <em>«📦 Сохранить в Saved Objects»</em>. На любом столе в игре откройте <code>Objects → Saved Objects</code> и перетащите колоду.
+            <strong>Способ 2 — Как ОБЪЕКТ:</strong> Нажмите кнопку <em>«Сохранить в Saved Objects»</em>. На любом столе в игре откройте <code>Objects → Saved Objects</code> и перетащите колоду.
           </li>
         </ol>
       </footer>
@@ -361,26 +381,26 @@
       <section class="card installed-card">
         <div class="installed-header">
           <div>
-            <h2 class="card-title">📚 Колоды, установленные в Tabletop Simulator</h2>
-            <p class="subtitle" style="margin-top: 4px;">Здесь собраны все игры и сохранённые объекты, доступные в вашей игре. Вы можете просмотреть их и удалить ненужные в 1 клик.</p>
+            <h2 class="card-title">Колоды, установленные в Tabletop Simulator</h2>
+            <p class="card-subtitle-subtle">Сохранённые игры и объекты, доступные в вашей игре. Вы можете просмотреть их и удалить ненужные в 1 клик.</p>
           </div>
           <div class="installed-header-actions">
-            <button id="btn-refresh-decks" class="btn btn-secondary btn-sm" title="Обновить список колод">🔄 Обновить</button>
-            <button id="btn-open-tts-dir" class="btn btn-secondary btn-sm" title="Открыть папку сохранений Tabletop Simulator">📁 Папка сохранений TTS</button>
-            <button id="btn-delete-all-decks" class="btn btn-danger btn-sm" title="Удалить ВСЕ созданные генератором колоды из Tabletop Simulator">🗑️ Очистить все колоды из TTS</button>
+            <button id="btn-refresh-decks" class="btn btn-secondary btn-sm" title="Обновить список колод">Обновить</button>
+            <button id="btn-open-tts-dir" class="btn btn-secondary btn-sm" title="Открыть папку сохранений Tabletop Simulator">Папка сохранений TTS</button>
+            <button id="btn-delete-all-decks" class="btn btn-danger btn-sm" title="Удалить все созданные генератором колоды из Tabletop Simulator">Очистить все колоды из TTS</button>
           </div>
         </div>
 
         <!-- Панель поиска и фильтров -->
         <div class="installed-filter-bar">
           <div class="search-input-wrapper">
-            <input type="text" id="installed-search" placeholder="🔍 Поиск по названию колоды..." class="filter-search-input">
+            <input type="text" id="installed-search" placeholder="Поиск по названию колоды..." class="filter-search-input">
           </div>
           <div class="filter-type-wrapper">
             <select id="installed-type-filter" class="filter-type-select">
               <option value="all">Все типы колод</option>
-              <option value="game">🎮 Только игры (Save & Load)</option>
-              <option value="saved_object">📦 Только Saved Objects</option>
+              <option value="game">Только игры (Save & Load)</option>
+              <option value="saved_object">Только Saved Objects</option>
             </select>
           </div>
         </div>
@@ -390,12 +410,18 @@
           <!-- Карточки вставляются через JavaScript -->
         </div>
 
-        <!-- Пустое состояние (когда нет колод) -->
+        <!-- Пустое состояние -->
         <div id="installed-empty" class="installed-empty-state hidden">
-          <div class="empty-state-icon">🎴</div>
+          <div class="empty-state-mark">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <line x1="9" y1="9" x2="15" y2="15"/>
+              <line x1="15" y1="9" x2="9" y2="15"/>
+            </svg>
+          </div>
           <h3>В Tabletop Simulator пока нет сохранённых колод</h3>
-          <p>Создайте свою первую колоду с уникальными карточками или импортируйте ZIP-архив от друга!</p>
-          <button id="btn-goto-generator" class="btn btn-primary" style="margin-top: 14px;">⚡ Перейти к генератору колод</button>
+          <p>Создайте свою первую колоду с уникальными карточками или импортируйте архив от друга.</p>
+          <button id="btn-goto-generator" class="btn btn-primary" style="margin-top: 14px;">Перейти к генератору</button>
         </div>
       </section>
     </div><!-- /tab-installed -->
@@ -406,40 +432,40 @@
     <div class="modal-backdrop" id="guide-modal-backdrop"></div>
     <div class="modal-dialog">
       <div class="modal-header">
-        <h3>❓ Как передать колоду другу в Tabletop Simulator</h3>
+        <h3 class="modal-title">Как передать колоду другу в Tabletop Simulator</h3>
         <button id="guide-modal-close" class="modal-close-btn" title="Закрыть">✕</button>
       </div>
       <div class="modal-body">
-        <p style="color: var(--text-muted); font-size: 13px;">
-          Вы можете переслать готовую колоду другу в одном ZIP-архиве. В архиве уже лежат все необходимые текстуры стола Tier List, листы карт, рубашка и текстовая подсказка.
+        <p class="modal-lead">
+          Вы можете переслать готовую колоду другу в одном ZIP-архиве. В архиве упакованы все необходимые текстуры стола Tier List, листы карт, рубашка и текстовая инструкция.
         </p>
 
         <div class="guide-step">
-          <h4>🚀 Способ 1: У друга тоже есть это приложение (1 клик — Рекомендуется)</h4>
+          <h4>Способ 1: У друга тоже есть это приложение (1 клик — Рекомендуется)</h4>
           <ol>
-            <li>После генерации колоды нажмите кнопку <strong>«📦 Скачать ZIP-архив для друга»</strong>.</li>
+            <li>После генерации колоды нажмите кнопку <strong>«Скачать ZIP-архив для друга»</strong>.</li>
             <li>Отправьте скачанный архив <code>TTS_Deck_Package.zip</code> другу (через Telegram, Discord и т.д.).</li>
-            <li>Друг открывает наше веб-приложение и в шапке нажимает кнопку <strong>«📥 Импортировать от друга»</strong>.</li>
-            <li>Выбирает полученный ZIP-файл. Приложение <strong>самостоятельно распакует файлы</strong> в его папку Tabletop Simulator и свяжет текстуры с его компьютером (никаких белых карт!).</li>
-            <li>Друг заходит в Tabletop Simulator: <code>Create → Games → Save & Load</code> и загружает появившееся сохранение. Стол Tier List и колода готовы к игре!</li>
+            <li>Друг открывает веб-приложение и в шапке нажимает кнопку <strong>«Импорт архива»</strong>.</li>
+            <li>Выбирает полученный ZIP-файл. Приложение <strong>автоматически распакует файлы</strong> в его папку Tabletop Simulator и свяжет локальные текстуры (белых карт не будет).</li>
+            <li>Друг заходит в Tabletop Simulator: <code>Create → Games → Save & Load</code> и загружает появившееся сохранение. Стол Tier List и колода готовы к игре.</li>
           </ol>
         </div>
 
         <div class="guide-step">
-          <h4>🛠️ Способ 2: У друга НЕТ этого приложения (Ручной импорт в игре)</h4>
+          <h4>Способ 2: У друга нет этого приложения (Ручной импорт в игре)</h4>
           <ol>
-            <li>Друг распаковывает присланный архив <code>.zip</code> в любую папку на диске. Внутри архива лежит файл <code>ИНСТРУКЦИЯ_ДЛЯ_ДРУГА.txt</code>.</li>
-            <li>В игре Tabletop Simulator друг нажимает: <code>Objects → Components → Cards → Custom Deck</code>.</li>
+            <li>Друг распаковывает присланный архив <code>.zip</code> в любую папку на диске. Внутри лежит файл <code>ИНСТРУКЦИЯ_ДЛЯ_ДРУГА.txt</code>.</li>
+            <li>В игре Tabletop Simulator нажимает: <code>Objects → Components → Cards → Custom Deck</code>.</li>
             <li>В окне настроек колоды указывает:
               <ul>
-                <li><strong>Face (Лицо):</strong> выбирает файл <code>deck_sheet_1.png</code> из распакованного архива.</li>
+                <li><strong>Face (Лицо):</strong> выбирает файл <code>deck_sheet_1.png</code> из архива.</li>
                 <li><strong>Back (Рубашка):</strong> выбирает <code>card_back.png</code>.</li>
                 <li><strong>Width (Ширина):</strong> 10.</li>
                 <li><strong>Height (Высота):</strong> 7.</li>
                 <li><strong>Number (Количество карт):</strong> 70.</li>
               </ul>
             </li>
-            <li>Нажимает <strong>Import</strong>. Если листов несколько (например, колода на 456 карт), аналогично импортирует <code>deck_sheet_2.png</code>, <code>deck_sheet_3.png</code> и т.д., а затем объединяет их клавишей <code>G</code> в одну стопку!</li>
+            <li>Нажимает <strong>Import</strong>. Если листов несколько, аналогично импортирует остальные листы, а затем объединяет их клавишей <code>G</code> в одну стопку.</li>
           </ol>
         </div>
       </div>
