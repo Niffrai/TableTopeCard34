@@ -77,6 +77,42 @@
             </div>
           </div>
 
+          <!-- Уровень откровенности контента -->
+          <div class="form-group">
+            <div class="label-row">
+              <label>
+                Уровень откровенности
+                <button type="button" class="info-btn" data-tooltip="Быстрое переключение стиля контента. Автоматически подставляет оптимальные теги в поля поиска и исключений.">i</button>
+              </label>
+              <span id="content-mode-badge" class="badge-subtle highlight-val">🔥 Полный 18+</span>
+            </div>
+            <div class="content-mode-selector">
+              <button type="button" class="mode-btn active" data-mode="explicit">
+                <span class="mode-icon">🔥</span>
+                <div class="mode-info">
+                  <span class="mode-title">Полный 18+</span>
+                  <span class="mode-desc">Откровенный (nude, explicit)</span>
+                </div>
+              </button>
+
+              <button type="button" class="mode-btn" data-mode="balanced">
+                <span class="mode-icon">✨</span>
+                <div class="mode-info">
+                  <span class="mode-title">Сбалансированный</span>
+                  <span class="mode-desc">Эччи / Пин-ап / Стандарт</span>
+                </div>
+              </button>
+
+              <button type="button" class="mode-btn" data-mode="light">
+                <span class="mode-icon">🌸</span>
+                <div class="mode-info">
+                  <span class="mode-title">Лайтовый / SFW</span>
+                  <span class="mode-desc">Без откровенностей (в одежде)</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <!-- Персонажи -->
           <div class="form-group">
             <div class="label-row">
@@ -95,13 +131,14 @@
               Положительные теги
               <button type="button" class="info-btn" data-tooltip="Теги для поиска артов на Booru (через запятую). Первые подходящие теги отправляются в поисковый запрос к API.">i</button>
             </label>
-            <input type="text" id="positive_tags" value="highres, solo" placeholder="highres, solo, swimsuit, cosplay">
+            <input type="text" id="positive_tags" value="highres, solo, nude, explicit" placeholder="highres, solo, swimsuit, cosplay">
             <div class="quick-chips">
               <span class="chip-label">Быстро:</span>
               <button type="button" class="chip" data-target="positive_tags" data-val="1girl">+ 1girl</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="highres">+ highres</button>
-              <button type="button" class="chip" data-target="positive_tags" data-val="masterpiece">+ masterpiece</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="nude">+ nude</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="clothed">+ clothed</button>
               <button type="button" class="chip" data-target="positive_tags" data-val="swimsuit">+ swimsuit</button>
+              <button type="button" class="chip" data-target="positive_tags" data-val="highres">+ highres</button>
               <button type="button" class="chip" data-target="positive_tags" data-val="score:>20">+ score:>20</button>
             </div>
           </div>

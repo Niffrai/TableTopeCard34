@@ -283,11 +283,60 @@ document.addEventListener("DOMContentLoaded", () => {
   setupShieldToggle(shieldShockBtn, "tts_shield_shock");
   setupShieldToggle(shieldFetishBtn, "tts_shield_fetish");
 
+  // --- 4.2. Переключатель режима откровенности контента ---
+  const contentModeBadge = document.getElementById("content-mode-badge");
+  const modeButtons = document.querySelectorAll(".mode-btn");
+
+  function setContentMode(mode, updateInputs = true) {
+    modeButtons.forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.mode === mode);
+    });
+
+    if (contentModeBadge) {
+      if (mode === "explicit") {
+        contentModeBadge.textContent = "🔥 Полный 18+";
+        contentModeBadge.className = "badge-subtle highlight-val";
+        if (updateInputs) {
+          posTagsInput.value = "highres, solo, nude, explicit";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
+        }
+      } else if (mode === "light") {
+        contentModeBadge.textContent = "🌸 Лайтовый (Без откровенностей)";
+        contentModeBadge.className = "badge-subtle";
+        if (updateInputs) {
+          posTagsInput.value = "highres, solo, clothed, aesthetic";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, nudity, sex, pussy, penis, explicit, topless, bottomless, cum, nipples, masturbation";
+        }
+      } else {
+        contentModeBadge.textContent = "✨ Сбалансированный";
+        contentModeBadge.className = "badge-subtle";
+        if (updateInputs) {
+          posTagsInput.value = "highres, solo";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
+        }
+      }
+    }
+    localStorage.setItem("tts_content_mode", mode);
+  }
+
+  modeButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      const mode = btn.dataset.mode;
+      if (mode) setContentMode(mode, true);
+    });
+  });
+
+  const savedMode = localStorage.getItem("tts_content_mode");
+  if (savedMode) {
+    setContentMode(savedMode, false);
+  }
+
   // --- 5. Запуск генерации ---
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const [cardW, cardH] = cardResolutionSelect.value.split("x").map(Number);
+    const activeModeBtn = document.querySelector(".mode-btn.active");
     const payload = {
       source: booruSourceSelect ? booruSourceSelect.value : "xbooru",
       rule34_user_id: rule34UserIdInput ? rule34UserIdInput.value.trim() : "",
@@ -303,7 +352,8 @@ document.addEventListener("DOMContentLoaded", () => {
       threads: threadsCountSelect ? parseInt(threadsCountSelect.value, 10) : 8,
       deck_title: deckTitleInput.value.trim() || "CUSTOM DECK",
       filter_shock_content: shieldShockBtn ? shieldShockBtn.classList.contains("active") : true,
-      filter_weird_fetishes: shieldFetishBtn ? shieldFetishBtn.classList.contains("active") : true
+      filter_weird_fetishes: shieldFetishBtn ? shieldFetishBtn.classList.contains("active") : true,
+      content_mode: activeModeBtn ? activeModeBtn.dataset.mode : "explicit"
     };
 
     setRunningState(true);

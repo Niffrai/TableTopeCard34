@@ -96,6 +96,8 @@ def generation_worker(params: dict):
         if isinstance(filter_fetishes, str):
             filter_fetishes = filter_fetishes.lower() in ("true", "1", "yes")
 
+        content_mode = params.get("content_mode", "balanced")
+
         res = generator.generate_deck(
             positive_tags=pos_tags,
             negative_tags=neg_tags,
@@ -112,7 +114,8 @@ def generation_worker(params: dict):
             threads=threads,
             progress_callback=on_progress,
             filter_shock_content=filter_shock,
-            filter_weird_fetishes=filter_fetishes
+            filter_weird_fetishes=filter_fetishes,
+            content_mode=content_mode
         )
 
         if res.get("success"):

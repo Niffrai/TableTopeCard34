@@ -310,6 +310,34 @@ def is_weird_fetish_tag(tag: str) -> bool:
     return False
 
 
+EXPLICIT_TAGS = {
+    "nude", "nudity", "topless", "bottomless", "completely_nude",
+    "sex", "penetration", "vaginal", "anal", "oral", "fellatio", "cunnilingus",
+    "pussy", "vagina", "penis", "testicles", "cock", "dick",
+    "cum", "creampie", "ejaculation", "cum_inside", "cum_on_body",
+    "nipples", "areola", "cameltoe", "pussy_juice", "masturbation",
+    "fingering", "dildo", "sex_toy", "explicit", "uncensored"
+}
+
+
+def is_explicit_post(post: dict, post_tags: set) -> bool:
+    """Определяет, является ли пост откровенным (18+ / нагота / половой акт)."""
+    rating = str(post.get("rating", "")).lower()
+    if rating in ("explicit", "e"):
+        return True
+    if post_tags.intersection(EXPLICIT_TAGS):
+        return True
+    if any(
+        t.startswith("cum_") or t.endswith("_cum") or "_cum_" in t or
+        t.startswith("pussy_") or t.endswith("_pussy") or
+        t.startswith("penis_") or t.endswith("_penis") or
+        t.startswith("sex_") or t.endswith("_sex")
+        for t in post_tags
+    ):
+        return True
+    return False
+
+
 class DeckGenerator:
     def __init__(self, output_dir: str, history_file: Optional[str] = None):
         self.output_dir = output_dir
@@ -446,7 +474,8 @@ class DeckGenerator:
         seen_urls: set,
         log_callback: Callable[[str], None],
         filter_shock_content: bool = True,
-        filter_weird_fetishes: bool = True
+        filter_weird_fetishes: bool = True,
+        content_mode: str = "balanced"
     ) -> list[dict]:
         """Ищет посты со случайной выборкой страниц и проверкой постоянной истории."""
         source_key = source if source in BOORU_SOURCES else "xbooru"
@@ -584,6 +613,15 @@ class DeckGenerator:
                 if filter_weird_fetishes and any(is_weird_fetish_tag(t) for t in post_tags):
                     continue
 
+                # 4. Фильтр откровенности контента (полный откровенный 18+ vs лайтовый/закрытый)
+                if content_mode == "light":
+                    if is_explicit_post(post, post_tags):
+                        continue
+                elif content_mode == "explicit":
+                    rating = str(post.get("rating", "")).lower()
+                    if rating in ("safe", "s", "general") and not is_explicit_post(post, post_tags):
+                        continue
+
                 # 4. Фильтрация по годам
                 if year_from or year_to:
                     post_year = self._parse_post_year(post)
@@ -669,7 +707,8 @@ class DeckGenerator:
         threads: int = 8,
         progress_callback: Optional[Callable[[dict], None]] = None,
         filter_shock_content: bool = True,
-        filter_weird_fetishes: bool = True
+        filter_weird_fetishes: bool = True,
+        content_mode: str = "balanced"
     ) -> dict:
         self.is_running = True
         self.should_stop = False
@@ -726,7 +765,8 @@ class DeckGenerator:
                 seen_urls=seen_urls,
                 log_callback=lambda msg: report(msg, 5),
                 filter_shock_content=filter_shock_content,
-                filter_weird_fetishes=filter_weird_fetishes
+                filter_weird_fetishes=filter_weird_fetishes,
+                content_mode=content_mode
             )
             pools_by_char.append((char, target_count, posts))
 
