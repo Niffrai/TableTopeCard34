@@ -188,6 +188,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("mouseenter", () => {
+      if (!activeTooltipBtn) showTooltip(btn);
+    });
+    btn.addEventListener("mouseleave", () => {
+      if (activeTooltipBtn !== btn) hideTooltip();
+    });
+  });
+
   document.addEventListener("click", (e) => {
     if (!e.target.closest(".info-btn") && !e.target.closest(".app-floating-tooltip")) {
       hideTooltip();
@@ -295,21 +304,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (contentModeBadge) {
       if (mode === "explicit") {
         contentModeBadge.textContent = "🔥 Полный 18+";
-        contentModeBadge.className = "badge-subtle highlight-val";
+        contentModeBadge.className = "badge-subtle badge-mode-explicit";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, nude, explicit";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else if (mode === "light") {
-        contentModeBadge.textContent = "🌸 Лайтовый (Без откровенностей)";
-        contentModeBadge.className = "badge-subtle";
+        contentModeBadge.textContent = "🌸 Лайтовый (SFW)";
+        contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, clothed, aesthetic";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, nudity, sex, pussy, penis, explicit, topless, bottomless, cum, nipples, masturbation";
         }
       } else {
         contentModeBadge.textContent = "✨ Сбалансированный";
-        contentModeBadge.className = "badge-subtle";
+        contentModeBadge.className = "badge-subtle badge-mode-balanced";
         if (updateInputs) {
           posTagsInput.value = "highres, solo";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
