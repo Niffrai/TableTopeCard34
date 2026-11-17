@@ -894,6 +894,32 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // --- ПЕРЕКЛЮЧАТЕЛЬ ТЕМЫ (Resend Minimalist <-> Frutiger Aero) ---
+  const btnThemeToggle = document.getElementById("btn-theme-toggle");
+  const themeBtnLabel = document.getElementById("theme-btn-label");
+
+  function applyTheme(theme) {
+    if (theme === "frutiger-aero") {
+      document.body.classList.add("theme-frutiger-aero");
+      if (themeBtnLabel) themeBtnLabel.textContent = "Минимализм";
+    } else {
+      document.body.classList.remove("theme-frutiger-aero");
+      if (themeBtnLabel) themeBtnLabel.textContent = "Frutiger Aero";
+    }
+  }
+
+  const savedTheme = localStorage.getItem("tts_theme") || "minimal";
+  applyTheme(savedTheme);
+
+  if (btnThemeToggle) {
+    btnThemeToggle.addEventListener("click", () => {
+      const isAero = document.body.classList.contains("theme-frutiger-aero");
+      const nextTheme = isAero ? "minimal" : "frutiger-aero";
+      localStorage.setItem("tts_theme", nextTheme);
+      applyTheme(nextTheme);
+    });
+  }
+
   // Первоначальный расчёт и загрузка статистики
   updateCharacterAllocation();
   updateHistoryStats();

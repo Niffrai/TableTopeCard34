@@ -1425,3 +1425,421 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .hidden {
   display: none !important;
 }
+
+/* ==========================================================================
+   Frutiger Aero Theme (Skeuomorphic Aqua Glass, 2000s Vista/7 Aesthetic)
+   ========================================================================== */
+
+body.theme-frutiger-aero {
+  background-color: #106ca8;
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.45) 0%, transparent 20%),
+    radial-gradient(circle at 82% 80%, rgba(255, 255, 255, 0.35) 0%, transparent 28%),
+    radial-gradient(circle at 50% 35%, rgba(144, 224, 239, 0.35) 0%, transparent 55%),
+    linear-gradient(145deg, #0b629c 0%, #1e9cb5 28%, #41be9a 65%, #76dca3 88%, #a0ebb9 100%);
+  background-attachment: fixed;
+  color: #0b2e4c;
+  transition: background 0.35s ease, color 0.25s ease;
+}
+
+/* Glass Header */
+body.theme-frutiger-aero .app-header {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(235, 248, 255, 0.38) 50%, rgba(215, 240, 255, 0.28) 100%);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 10px 32px rgba(0, 50, 100, 0.22), inset 0 1px 2px rgba(255, 255, 255, 1);
+}
+
+body.theme-frutiger-aero .brand-name {
+  color: #03365a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  font-weight: 700;
+}
+
+body.theme-frutiger-aero .brand-subtitle {
+  color: #104f7a;
+}
+
+body.theme-frutiger-aero .version-tag {
+  background: linear-gradient(180deg, #7ad3ff 0%, #0288d1 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 1px rgba(0, 30, 70, 0.6);
+  box-shadow: 0 2px 6px rgba(2, 136, 209, 0.35);
+}
+
+body.theme-frutiger-aero .brand-mark {
+  background: linear-gradient(135deg, #a7f3d0 0%, #38bdf8 50%, #0284c7 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4), inset 0 1px 2px #fff;
+  color: #ffffff;
+}
+
+/* Glass Navigation Tabs */
+body.theme-frutiger-aero .app-tabs-nav {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, rgba(220, 240, 255, 0.35) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 16px rgba(0, 50, 100, 0.15), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .tab-btn {
+  color: #0b4570;
+  font-weight: 600;
+}
+
+body.theme-frutiger-aero .tab-btn:hover {
+  color: #0284c7;
+}
+
+body.theme-frutiger-aero .tab-btn.active {
+  background: linear-gradient(180deg, #5eead4 0%, #0ea5e9 48%, #0284c7 52%, #0369a1 100%);
+  color: #ffffff;
+  border: 1px solid #026aa2;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.45), inset 0 1px 2px rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 30, 70, 0.6);
+}
+
+body.theme-frutiger-aero .tab-btn.active .tab-badge {
+  background: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+}
+
+/* Glass Cards */
+body.theme-frutiger-aero .card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55) 0%, rgba(240, 248, 255, 0.3) 100%);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 16px 45px rgba(0, 45, 90, 0.2), inset 0 1px 2px rgba(255, 255, 255, 1);
+  color: #0c2f4d;
+}
+
+body.theme-frutiger-aero .card-title {
+  color: #053154;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+  font-weight: 700;
+}
+
+body.theme-frutiger-aero .card-subtitle-subtle {
+  color: #1a5680;
+}
+
+body.theme-frutiger-aero label {
+  color: #09375e;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+
+/* Skeuomorphic Glass Inputs */
+body.theme-frutiger-aero input[type="text"],
+body.theme-frutiger-aero input[type="number"],
+body.theme-frutiger-aero select,
+body.theme-frutiger-aero textarea {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(130, 190, 235, 0.9);
+  color: #072a48;
+  box-shadow: inset 0 2px 4px rgba(0, 40, 80, 0.1), 0 1px 0 rgba(255, 255, 255, 0.95);
+  font-weight: 500;
+}
+
+body.theme-frutiger-aero input[type="text"]:focus,
+body.theme-frutiger-aero input[type="number"]:focus,
+body.theme-frutiger-aero select:focus,
+body.theme-frutiger-aero textarea:focus {
+  background: #ffffff;
+  border-color: #0288d1;
+  box-shadow: inset 0 1px 3px rgba(0, 40, 80, 0.1), 0 0 10px rgba(2, 136, 209, 0.45);
+}
+
+body.theme-frutiger-aero select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%230288d1' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* Aqua 3D Gel Buttons */
+body.theme-frutiger-aero .btn-primary {
+  background: linear-gradient(180deg, #67e8f9 0%, #38bdf8 47%, #0284c7 52%, #0369a1 100%);
+  color: #ffffff;
+  border: 1px solid #025987;
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.45), inset 0 1px 2px rgba(255, 255, 255, 0.9), inset 0 -2px 3px rgba(0, 30, 60, 0.35);
+  text-shadow: 0 1px 2px rgba(0, 20, 50, 0.7);
+  font-weight: 600;
+}
+
+body.theme-frutiger-aero .btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #a5f3fc 0%, #60a5fa 47%, #0369a1 52%, #075985 100%);
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.6), inset 0 1px 2px #fff;
+  transform: translateY(-1px);
+}
+
+body.theme-frutiger-aero .btn-secondary {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(240, 248, 255, 0.8) 48%, rgba(220, 240, 255, 0.7) 52%, rgba(200, 230, 250, 0.9) 100%);
+  border: 1px solid rgba(150, 205, 245, 0.95);
+  color: #0b4570;
+  box-shadow: 0 3px 8px rgba(0, 50, 100, 0.12), inset 0 1px 1px #fff;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+
+body.theme-frutiger-aero .btn-secondary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff 0%, rgba(245, 252, 255, 0.95) 48%, rgba(230, 245, 255, 0.85) 52%, rgba(215, 240, 255, 0.98) 100%);
+  border-color: #38bdf8;
+  color: #0284c7;
+  transform: translateY(-1px);
+}
+
+/* Theme Toggle Button (Eye-catching Aqua/Orange jewel button) */
+body.theme-frutiger-aero .theme-toggle-btn {
+  background: linear-gradient(180deg, #fed7aa 0%, #fb923c 48%, #ea580c 52%, #c2410c 100%);
+  color: #ffffff;
+  border: 1px solid #9a3412;
+  text-shadow: 0 1px 2px rgba(60, 20, 0, 0.7);
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+}
+
+body.theme-frutiger-aero .theme-toggle-btn:hover {
+  background: linear-gradient(180deg, #ffedd5 0%, #f97316 48%, #c2410c 52%, #9a3412 100%);
+  color: #ffffff;
+}
+
+/* Segmented Rating Control */
+body.theme-frutiger-aero .content-mode-segmented {
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(160, 210, 245, 0.85);
+  box-shadow: inset 0 1px 3px rgba(0, 30, 70, 0.1);
+}
+
+body.theme-frutiger-aero .mode-btn {
+  color: #0e4b75;
+  font-weight: 600;
+}
+
+body.theme-frutiger-aero .mode-btn.active {
+  background: linear-gradient(180deg, #6ee7b7 0%, #10b981 48%, #059669 52%, #047857 100%);
+  color: #ffffff;
+  border: 1px solid #065f46;
+  box-shadow: 0 3px 8px rgba(5, 150, 105, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 30, 15, 0.6);
+}
+
+/* Shields & Protection Filters */
+body.theme-frutiger-aero .shield-btn,
+body.theme-frutiger-aero .secondary-filter-btn {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(160, 210, 245, 0.85);
+  color: #0b4570;
+  box-shadow: 0 2px 6px rgba(0, 40, 80, 0.08), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .shield-btn.active,
+body.theme-frutiger-aero .secondary-filter-btn.active {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: #38bdf8;
+  color: #0284c7;
+}
+
+body.theme-frutiger-aero .shield-indicator {
+  box-shadow: 0 0 6px #ef4444;
+}
+
+body.theme-frutiger-aero .shield-btn.active .shield-indicator {
+  box-shadow: 0 0 6px #10b981;
+}
+
+body.theme-frutiger-aero .shield-badge {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626;
+}
+
+body.theme-frutiger-aero .shield-btn.active .shield-badge {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #047857;
+}
+
+/* History Chip Group */
+body.theme-frutiger-aero .history-chip-group {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 40, 80, 0.1), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .history-badge {
+  color: #0b4570;
+}
+
+body.theme-frutiger-aero .history-badge strong {
+  color: #03365a;
+}
+
+body.theme-frutiger-aero .btn-clear-history-pill {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(180, 215, 240, 0.95);
+  color: #0b4570;
+  box-shadow: 0 1px 3px rgba(0, 40, 80, 0.1);
+}
+
+/* Chips */
+body.theme-frutiger-aero .chip {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(160, 210, 245, 0.85);
+  color: #0b4570;
+  box-shadow: 0 1px 3px rgba(0, 40, 80, 0.08);
+}
+
+body.theme-frutiger-aero .chip:hover {
+  background: #ffffff;
+  border-color: #38bdf8;
+  color: #0284c7;
+}
+
+body.theme-frutiger-aero .chip-neg {
+  background: rgba(254, 226, 226, 0.8);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #b91c1c;
+}
+
+/* Deck Size Block */
+body.theme-frutiger-aero .deck-size-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(235, 245, 255, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero input[type="range"] {
+  background: linear-gradient(90deg, #38bdf8, #34d399);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+body.theme-frutiger-aero input[type="range"]::-webkit-slider-thumb {
+  background: linear-gradient(180deg, #ffffff 0%, #e0f2fe 100%);
+  border: 2px solid #0284c7;
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.4);
+}
+
+body.theme-frutiger-aero .preset-chip {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(160, 210, 245, 0.85);
+  color: #0b4570;
+}
+
+body.theme-frutiger-aero .preset-chip.active {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+  border-color: #0369a1;
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(0, 30, 70, 0.6);
+  box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);
+}
+
+/* Glowing Console Box */
+body.theme-frutiger-aero .console-box {
+  background: linear-gradient(180deg, rgba(8, 24, 42, 0.92) 0%, rgba(4, 16, 28, 0.96) 100%);
+  border: 1px solid rgba(120, 210, 255, 0.45);
+  box-shadow: 0 12px 30px rgba(0, 30, 70, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+body.theme-frutiger-aero .console-header {
+  background: linear-gradient(180deg, rgba(20, 50, 80, 0.8) 0%, rgba(10, 30, 55, 0.8) 100%);
+  border-bottom: 1px solid rgba(120, 210, 255, 0.3);
+}
+
+body.theme-frutiger-aero .console-title {
+  color: #67e8f9;
+  text-shadow: 0 0 8px rgba(103, 232, 249, 0.5);
+}
+
+body.theme-frutiger-aero .log-line {
+  color: #bae6fd;
+}
+
+body.theme-frutiger-aero .log-line.text-muted {
+  color: #7dd3fc;
+}
+
+/* Progress Bar */
+body.theme-frutiger-aero .progress-track {
+  background: rgba(0, 40, 80, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+body.theme-frutiger-aero .progress-fill {
+  background: linear-gradient(180deg, #67e8f9 0%, #06b6d4 48%, #0891b2 52%, #0e7490 100%);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.7);
+}
+
+/* Result Box */
+body.theme-frutiger-aero .result-box {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(235, 248, 255, 0.5) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 30px rgba(0, 50, 100, 0.15), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .result-mark {
+  background: linear-gradient(135deg, #a7f3d0 0%, #10b981 100%);
+  border: 1px solid #fff;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+body.theme-frutiger-aero .result-info h3 {
+  color: #064e3b;
+}
+
+body.theme-frutiger-aero .result-info p {
+  color: #047857;
+}
+
+/* Installed Decks */
+body.theme-frutiger-aero .deck-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.65) 0%, rgba(240, 248, 255, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 40, 80, 0.12), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .deck-card-title {
+  color: #053154;
+}
+
+body.theme-frutiger-aero .deck-meta-pill {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(160, 210, 245, 0.8);
+  color: #0c436b;
+}
+
+body.theme-frutiger-aero .deck-card-footer {
+  border-top-color: rgba(160, 210, 245, 0.6);
+}
+
+/* Modal Dialog */
+body.theme-frutiger-aero .modal-dialog {
+  background: linear-gradient(135deg, rgba(245, 252, 255, 0.95) 0%, rgba(225, 245, 255, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 20px 60px rgba(0, 40, 90, 0.35);
+  color: #0b3456;
+}
+
+body.theme-frutiger-aero .modal-title {
+  color: #042e50;
+}
+
+body.theme-frutiger-aero .guide-step {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(160, 210, 245, 0.8);
+  box-shadow: 0 2px 6px rgba(0, 40, 80, 0.08);
+}
+
+body.theme-frutiger-aero .guide-step h4 {
+  color: #0284c7;
+}
+
+body.theme-frutiger-aero .guide-step ol,
+body.theme-frutiger-aero .guide-step ul {
+  color: #0f4c75;
+}
+
+body.theme-frutiger-aero .guide-step strong {
+  color: #03365a;
+}
+
