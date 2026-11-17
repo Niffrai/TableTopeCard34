@@ -325,7 +325,7 @@ document.addEventListener("DOMContentLoaded", () => {
         contentModeBadge.className = "badge-subtle badge-mode-light";
         if (updateInputs) {
           posTagsInput.value = "highres, solo, -rating:explicit";
-          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
+          negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text, nude, sex, nipples, penetration, topless, bottomless";
         }
       } else {
         contentModeBadge.textContent = "✨ Сбалансированный";
