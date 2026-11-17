@@ -6,6 +6,7 @@ import math
 import os
 import re
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -121,14 +122,36 @@ def generation_worker(params: dict):
         app_state["is_running"] = False
 
 
+def open_folder(path: str):
+    """Кроссплатформенное открытие папки в проводнике / файловом менеджере."""
+    if sys.platform.startswith("win"):
+        os.startfile(path)
+    elif sys.platform.startswith("darwin"):
+        subprocess.Popen(["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path])
+
+
 def find_tts_saves_dir() -> Path | None:
-    """Определяет стандартный путь к папке Saves в Tabletop Simulator."""
-    docs = Path(os.path.expanduser("~")) / "Documents" / "My Games" / "Tabletop Simulator" / "Saves"
-    if docs.exists():
-        return docs
-    onedrive_docs = Path(os.path.expanduser("~")) / "OneDrive" / "Documents" / "My Games" / "Tabletop Simulator" / "Saves"
-    if onedrive_docs.exists():
-        return onedrive_docs
+    """Определяет стандартный путь к папке Saves в Tabletop Simulator (Windows, Linux, macOS)."""
+    home = Path(os.path.expanduser("~"))
+    candidates = [
+        # Windows
+        home / "Documents" / "My Games" / "Tabletop Simulator" / "Saves",
+        home / "OneDrive" / "Documents" / "My Games" / "Tabletop Simulator" / "Saves",
+        # Linux Native Steam
+        home / ".local" / "share" / "Tabletop Simulator" / "Saves",
+        # Linux Flatpak Steam
+        home / ".var" / "app" / "com.valvesoftware.Steam" / ".local" / "share" / "Tabletop Simulator" / "Saves",
+        # Linux Proton / Steam Play
+        home / ".steam" / "steam" / "steamapps" / "compatdata" / "286160" / "pfx" / "drive_c" / "users" / "steamuser" / "Documents" / "My Games" / "Tabletop Simulator" / "Saves",
+        home / ".local" / "share" / "Steam" / "steamapps" / "compatdata" / "286160" / "pfx" / "drive_c" / "users" / "steamuser" / "Documents" / "My Games" / "Tabletop Simulator" / "Saves",
+        # macOS
+        home / "Library" / "Tabletop Simulator" / "Saves",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
     return None
 
 
@@ -501,7 +524,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if url_path == "/api/open-folder":
             try:
-                os.startfile(OUTPUT_DIR)
+                open_folder(OUTPUT_DIR)
                 self._send_json({"success": True})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
@@ -511,7 +534,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 photos_dir = os.path.join(OUTPUT_DIR, "photos")
                 os.makedirs(photos_dir, exist_ok=True)
-                os.startfile(photos_dir)
+                open_folder(photos_dir)
                 self._send_json({"success": True})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
@@ -873,7 +896,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             saves_dir = find_tts_saves_dir()
             if saves_dir and saves_dir.exists():
                 try:
-                    os.startfile(str(saves_dir))
+                    open_folder(str(saves_dir))
                     self._send_json({"success": True})
                 except Exception as e:
                     self._send_json({"success": False, "error": str(e)}, 500)
