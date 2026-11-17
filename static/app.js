@@ -48,20 +48,51 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultBox = document.getElementById("result-box");
   const resultSummary = document.getElementById("result-summary");
   const sheetsList = document.getElementById("sheets-list");
+  const deckSheetsCalc = document.getElementById("deck-sheets-calc");
 
   let pollInterval = null;
   let lastLogCount = 0;
 
-  // --- 1. Синхронизация слайдера и числового поля ---
+  // --- 1. Синхронизация слайдера и числового поля (до 1024 карт) ---
+  const MAX_PER_SHEET = 70;
+
+  function updateSheetsCalc(total) {
+    if (!deckSheetsCalc) return;
+    const numSheets = Math.ceil(total / MAX_PER_SHEET);
+    const fullSheets = Math.floor(total / MAX_PER_SHEET);
+    const remainder = total % MAX_PER_SHEET;
+
+    if (numSheets <= 1) {
+      deckSheetsCalc.textContent = `${total} карт на 1 листе`;
+    } else if (remainder === 0) {
+      deckSheetsCalc.textContent = `${numSheets} листов (${fullSheets}×70)`;
+    } else {
+      deckSheetsCalc.textContent = `${numSheets} листов (${fullSheets}×70 + ${remainder})`;
+    }
+
+    document.querySelectorAll(".preset-chip").forEach(chip => {
+      const val = parseInt(chip.dataset.val, 10);
+      chip.classList.toggle("active", val === total);
+    });
+  }
+
   function syncCardsCount(val) {
-    const num = Math.max(1, parseInt(val, 10) || 1);
-    totalCardsRange.value = Math.min(num, 600);
+    const num = Math.max(1, Math.min(1024, parseInt(val, 10) || 1));
+    totalCardsRange.value = num;
     totalCardsNum.value = num;
+    updateSheetsCalc(num);
     updateCharacterAllocation();
   }
 
   totalCardsRange.addEventListener("input", () => syncCardsCount(totalCardsRange.value));
   totalCardsNum.addEventListener("input", () => syncCardsCount(totalCardsNum.value));
+
+  document.querySelectorAll(".preset-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const val = parseInt(chip.dataset.val, 10);
+      if (val) syncCardsCount(val);
+    });
+  });
 
   // --- 2. Динамический расчет распределения по персонажам ---
   function updateCharacterAllocation() {
@@ -83,6 +114,89 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   charTextarea.addEventListener("input", updateCharacterAllocation);
+
+  // Инициализация расчета листов при загрузке
+  syncCardsCount(totalCardsNum.value || 456);
+
+  // --- 3. Интерактивные всплывающие подсказки (кнопки "i") ---
+  const floatingTooltip = document.createElement("div");
+  floatingTooltip.className = "app-floating-tooltip";
+  document.body.appendChild(floatingTooltip);
+
+  let activeTooltipBtn = null;
+
+  function showTooltip(btn) {
+    const text = btn.getAttribute("data-tooltip");
+    if (!text) return;
+    floatingTooltip.textContent = text;
+    floatingTooltip.classList.add("visible");
+
+    const btnRect = btn.getBoundingClientRect();
+    const tooltipWidth = floatingTooltip.offsetWidth;
+    const tooltipHeight = floatingTooltip.offsetHeight;
+
+    let left = btnRect.left + (btnRect.width / 2) - (tooltipWidth / 2);
+    const padding = 12;
+    if (left < padding) left = padding;
+    if (left + tooltipWidth > window.innerWidth - padding) {
+      left = window.innerWidth - padding - tooltipWidth;
+    }
+
+    let top = btnRect.top + window.scrollY - tooltipHeight - 8;
+    let arrowAtTop = false;
+
+    if (btnRect.top - tooltipHeight - 8 < 10) {
+      top = btnRect.bottom + window.scrollY + 8;
+      arrowAtTop = true;
+    }
+
+    floatingTooltip.style.top = `${top}px`;
+    floatingTooltip.style.left = `${left}px`;
+    floatingTooltip.classList.toggle("arrow-top", arrowAtTop);
+
+    const arrowX = btnRect.left + (btnRect.width / 2) - left;
+    floatingTooltip.style.setProperty("--arrow-left", `${Math.max(12, Math.min(tooltipWidth - 12, arrowX))}px`);
+  }
+
+  function hideTooltip() {
+    floatingTooltip.classList.remove("visible");
+    if (activeTooltipBtn) {
+      activeTooltipBtn.classList.remove("active");
+      activeTooltipBtn = null;
+    }
+  }
+
+  document.querySelectorAll(".info-btn").forEach(btn => {
+    btn.addEventListener("mouseenter", () => {
+      if (!activeTooltipBtn) showTooltip(btn);
+    });
+
+    btn.addEventListener("mouseleave", () => {
+      if (activeTooltipBtn !== btn) hideTooltip();
+    });
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (activeTooltipBtn === btn) {
+        hideTooltip();
+      } else {
+        if (activeTooltipBtn) activeTooltipBtn.classList.remove("active");
+        activeTooltipBtn = btn;
+        btn.classList.add("active");
+        showTooltip(btn);
+      }
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".info-btn") && !e.target.closest(".app-floating-tooltip")) {
+      hideTooltip();
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideTooltip();
+  });
 
   // --- 3. Авторизация Rule34 и выбор источника ---
   if (rule34UserIdInput && rule34ApiKeyInput) {

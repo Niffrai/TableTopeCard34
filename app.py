@@ -77,7 +77,7 @@ def generation_worker(params: dict):
         else:
             chars = char_raw
 
-        total_cards = int(params.get("total_cards", 456))
+        total_cards = max(1, min(int(params.get("total_cards", 456)), 1024))
         year_from = int(params["year_from"]) if params.get("year_from") else None
         year_to = int(params["year_to"]) if params.get("year_to") else None
         card_w = int(params.get("card_width", 300))

@@ -303,6 +303,196 @@ input[type="range"] {
   color: #fca5a5;
 }
 
+/* Utility */
+.mb-0 {
+  margin-bottom: 0 !important;
+}
+
+/* Info Tooltip Button (i) */
+.info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-style: normal;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.info-btn:hover,
+.info-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+  box-shadow: 0 0 12px var(--primary-glow);
+  transform: scale(1.1);
+}
+
+/* Global Floating Tooltip Popover */
+.app-floating-tooltip {
+  position: absolute;
+  z-index: 99999;
+  background: #181b28;
+  border: 1px solid rgba(99, 102, 241, 0.45);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65), 0 0 18px rgba(99, 102, 241, 0.2);
+  color: #f1f5f9;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  max-width: 290px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.app-floating-tooltip.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.app-floating-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: var(--arrow-left, 50%);
+  transform: translateX(-50%);
+  border-width: 5px;
+  border-style: solid;
+  border-color: #181b28 transparent transparent transparent;
+}
+
+.app-floating-tooltip.arrow-top::after {
+  top: auto;
+  bottom: 100%;
+  border-color: transparent transparent #181b28 transparent;
+}
+
+/* Deck Size Section (Spacious dedicated block) */
+.deck-size-card {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  transition: border-color 0.2s ease;
+}
+
+.deck-size-card:focus-within {
+  border-color: rgba(99, 102, 241, 0.5);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.08);
+}
+
+.deck-size-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.deck-size-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.deck-sheets-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  letter-spacing: -0.01em;
+}
+
+.deck-size-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deck-size-input-wrap input {
+  width: 82px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--primary);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.cards-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.range-presets {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.preset-chip {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.preset-chip:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-main);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.preset-chip.active {
+  background: rgba(99, 102, 241, 0.2);
+  color: #c7d2fe;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+/* Two-column Deck Parameters (Resolution + Parallelism) */
+.deck-params-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+@media (max-width: 680px) {
+  .deck-params-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
 /* Buttons */
 .btn {
   display: inline-flex;

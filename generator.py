@@ -405,18 +405,25 @@ class DeckGenerator:
         all_candidates = []
         target_buffer = max(int(needed_count * 1.5), needed_count + 30)
 
-        # Рандомизация страниц: выбираем случайные страницы из большого пула архива
-        max_possible_pages = 80 if not character else 25
+        # Рандомизация страниц: адаптивно определяем размер пула страниц в зависимости от нужного числа карт (до 1024)
+        pages_needed_est = math.ceil(target_buffer / 50) + 10
+        max_possible_pages = max(120, pages_needed_est + 50) if not character else max(50, pages_needed_est + 20)
         available_pages = list(range(max_possible_pages))
         random.shuffle(available_pages)
-        # Всегда включаем несколько первых страниц, но перемешиваем со случайными глубокими страницами
-        pages_to_check = [0, 1] + available_pages[:20]
-        pages_to_check = list(dict.fromkeys(pages_to_check))  # уникальные
+
+        # Первые свежие страницы + случайные глубокие страницы из пула
+        initial_sample_count = max(pages_needed_est, 25)
+        pages_to_check = [0, 1, 2] + available_pages[:initial_sample_count]
+        pages_to_check = list(dict.fromkeys(pages_to_check))
+        # Оставшиеся страницы держим в резерве на случай большого количества дубликатов/истории
+        remaining_reserve = [p for p in available_pages if p not in pages_to_check]
+        page_queue = pages_to_check + remaining_reserve
 
         switched_to_fallback = False
         skipped_from_history = 0
+        consecutive_empty_pages = 0
 
-        for pid in pages_to_check:
+        for pid in page_queue:
             if len(all_candidates) >= target_buffer or self.should_stop:
                 break
 
@@ -456,7 +463,12 @@ class DeckGenerator:
                 break
 
             if len(resp_data) == 0:
+                consecutive_empty_pages += 1
+                if consecutive_empty_pages >= 6:
+                    break
                 continue
+            else:
+                consecutive_empty_pages = 0
 
             for post in resp_data:
                 file_url = post.get("file_url")
