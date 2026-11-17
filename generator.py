@@ -366,6 +366,18 @@ class DeckGenerator:
                 os.remove(self.history_file)
             except Exception:
                 pass
+        self.clean_old_sheets()
+
+    def clean_old_sheets(self):
+        """Удаляет все старые листы колод deck_sheet_*.png из папки вывода."""
+        if not os.path.exists(self.output_dir):
+            return
+        for f in os.listdir(self.output_dir):
+            if f.startswith("deck_sheet_") and f.endswith(".png"):
+                try:
+                    os.remove(os.path.join(self.output_dir, f))
+                except Exception as e:
+                    print(f"Ошибка удаления старого листа {f}: {e}")
 
     def get_history_stats(self) -> dict:
         return {
@@ -672,6 +684,9 @@ class DeckGenerator:
 
         report("Инициализация генерации...", 0)
 
+        # Очищаем старые листы колоды (deck_sheet_*.png), чтобы они не копились между генерациями
+        self.clean_old_sheets()
+
         clean_characters = [c.strip() for c in characters if c.strip()]
         character_targets = []
 
@@ -875,6 +890,9 @@ class DeckGenerator:
 
         total_cards_count = len(processed_cards)
         num_sheets = math.ceil(total_cards_count / MAX_PER_SHEET)
+
+        # Гарантируем чистоту папки перед записью новой партии листов
+        self.clean_old_sheets()
 
         for sheet_idx in range(num_sheets):
             start_i = sheet_idx * MAX_PER_SHEET
