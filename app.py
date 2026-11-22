@@ -71,6 +71,18 @@ def generation_worker(params: dict):
         else:
             chars = char_raw
 
+        artists_raw = params.get("positive_artists", params.get("artists", ""))
+        if isinstance(artists_raw, str):
+            artists = [a.strip() for a in artists_raw.replace("\n", ",").split(",") if a.strip()]
+        else:
+            artists = artists_raw
+
+        neg_artists_raw = params.get("negative_artists", "")
+        if isinstance(neg_artists_raw, str):
+            neg_artists = [a.strip() for a in neg_artists_raw.replace("\n", ",").split(",") if a.strip()]
+        else:
+            neg_artists = neg_artists_raw
+
         total_cards = max(1, min(int(params.get("total_cards", 456)), 1024))
         year_from = int(params["year_from"]) if params.get("year_from") else None
         year_to = int(params["year_to"]) if params.get("year_to") else None
@@ -118,7 +130,9 @@ def generation_worker(params: dict):
             filter_weird_fetishes=filter_fetishes,
             content_mode=content_mode,
             filter_empty_center=filter_empty_center,
-            fit_mode=fit_mode
+            fit_mode=fit_mode,
+            artists=artists,
+            negative_artists=neg_artists
         )
 
         if res.get("success"):

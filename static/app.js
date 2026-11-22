@@ -8,6 +8,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const rule34ApiKeyInput = document.getElementById("rule34_api_key");
   const charTextarea = document.getElementById("characters");
   const charCalcBadge = document.getElementById("char-calc-badge");
+  const posArtistsInput = document.getElementById("positive_artists");
+  const negArtistsInput = document.getElementById("negative_artists");
+  const artistCalcBadge = document.getElementById("artist-calc-badge");
   const posTagsInput = document.getElementById("positive_tags");
   const negTagsInput = document.getElementById("negative_tags");
   const totalCardsRange = document.getElementById("total_cards_range");
@@ -82,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     totalCardsNum.value = num;
     updateSheetsCalc(num);
     updateCharacterAllocation();
+    updateArtistAllocation();
   }
 
   totalCardsRange.addEventListener("input", () => syncCardsCount(totalCardsRange.value));
@@ -114,6 +118,30 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   charTextarea.addEventListener("input", updateCharacterAllocation);
+
+  // --- 2.1. Динамический расчет распределения по художникам ---
+  function updateArtistAllocation() {
+    if (!artistCalcBadge || !posArtistsInput) return;
+    const raw = posArtistsInput.value;
+    const artists = raw.split(/[\s,]+/).map(a => a.trim().replace(/^@/, "")).filter(Boolean);
+    const total = parseInt(totalCardsNum.value, 10) || 456;
+
+    if (artists.length === 0) {
+      artistCalcBadge.textContent = "Любые авторы";
+      artistCalcBadge.className = "badge-subtle";
+    } else {
+      const perArtist = Math.floor(total / artists.length);
+      const rem = total % artists.length;
+      let hint = `${artists.length} авт.: по ~${perArtist} карт`;
+      if (rem > 0) hint += ` (+${rem})`;
+      artistCalcBadge.textContent = hint;
+      artistCalcBadge.className = "badge-subtle highlight-val";
+    }
+  }
+
+  if (posArtistsInput) {
+    posArtistsInput.addEventListener("input", updateArtistAllocation);
+  }
 
   // Инициализация расчета листов при загрузке
   syncCardsCount(totalCardsNum.value || 456);
@@ -236,6 +264,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const current = input.value.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
       if (!current.includes(val) && !current.includes("-" + val)) {
         input.value = current.length > 0 ? `${input.value.trim()}, ${val}` : val;
+        input.dispatchEvent(new Event("input"));
+        input.dispatchEvent(new Event("change"));
       }
     });
   });
@@ -381,6 +411,28 @@ document.addEventListener("DOMContentLoaded", () => {
     setFitMode(savedFitMode);
   }
 
+  // Восстановление художников из localStorage
+  const savedPosArtists = localStorage.getItem("tts_positive_artists");
+  if (savedPosArtists && posArtistsInput) {
+    posArtistsInput.value = savedPosArtists;
+    updateArtistAllocation();
+  }
+  const savedNegArtists = localStorage.getItem("tts_negative_artists");
+  if (savedNegArtists && negArtistsInput) {
+    negArtistsInput.value = savedNegArtists;
+  }
+
+  if (posArtistsInput) {
+    posArtistsInput.addEventListener("change", () => {
+      localStorage.setItem("tts_positive_artists", posArtistsInput.value);
+    });
+  }
+  if (negArtistsInput) {
+    negArtistsInput.addEventListener("change", () => {
+      localStorage.setItem("tts_negative_artists", negArtistsInput.value);
+    });
+  }
+
   // --- 5. Запуск генерации ---
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -395,6 +447,8 @@ document.addEventListener("DOMContentLoaded", () => {
       positive_tags: posTagsInput.value,
       negative_tags: negTagsInput.value,
       characters: charTextarea.value,
+      positive_artists: posArtistsInput ? posArtistsInput.value.trim() : "",
+      negative_artists: negArtistsInput ? negArtistsInput.value.trim() : "",
       total_cards: parseInt(totalCardsNum.value, 10) || 456,
       year_from: yearFromInput.value ? parseInt(yearFromInput.value, 10) : null,
       year_to: yearToInput.value ? parseInt(yearToInput.value, 10) : null,

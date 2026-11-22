@@ -546,7 +546,9 @@ class DeckGenerator:
         log_callback: Callable[[str], None],
         filter_shock_content: bool = True,
         filter_weird_fetishes: bool = True,
-        content_mode: str = "balanced"
+        content_mode: str = "balanced",
+        artist: Optional[str] = None,
+        negative_artists: Optional[list[str]] = None
     ) -> list[dict]:
         """Ищет посты со случайной выборкой страниц и проверкой постоянной истории."""
         source_key = source if source in BOORU_SOURCES else "xbooru"
@@ -560,6 +562,14 @@ class DeckGenerator:
         if character:
             clean_char = character.strip().lower().replace(" ", "_")
             api_query_tags.append(clean_char)
+
+        clean_artist = None
+        if artist:
+            clean_artist = artist.lstrip("@").strip().lower().replace(" ", "_")
+            if clean_artist.startswith("artist:"):
+                clean_artist = clean_artist[7:]
+            if clean_artist and clean_artist not in api_query_tags and len(api_query_tags) < 3:
+                api_query_tags.append(clean_artist)
 
         for tag in positive_tags:
             tag = tag.strip().lower().replace(" ", "_")
@@ -585,14 +595,22 @@ class DeckGenerator:
                 api_query_tags.append("rating:e")
 
         if api_type == "moebooru":
-            if not character and len(api_query_tags) < 3 and "order:random" not in api_query_tags:
+            if not character and not artist and len(api_query_tags) < 3 and "order:random" not in api_query_tags:
                 api_query_tags.append("order:random")
         else:
             if len(api_query_tags) < 3 and "-video" not in api_query_tags:
                 api_query_tags.append("-video")
 
         tags_query_str = " ".join(api_query_tags)
-        char_label = character if character else "Случайный пул"
+        if character and artist:
+            char_label = f"{character} ({artist})"
+        elif character:
+            char_label = character
+        elif artist:
+            char_label = f"Художник: {artist}"
+        else:
+            char_label = "Случайный пул"
+
         log_callback(f"Поиск для '{char_label}' в {source_info['name']} (запрос: '{tags_query_str}')...")
 
         cleaned_negatives = set()
@@ -601,6 +619,16 @@ class DeckGenerator:
             if neg_clean:
                 cleaned_negatives.add(neg_clean)
         cleaned_negatives.update(["video", "animated", "webm", "mp4"])
+
+        cleaned_negative_artists = set()
+        if negative_artists:
+            for neg_a in negative_artists:
+                na = neg_a.lstrip("-").lstrip("@").strip().lower().replace(" ", "_")
+                if na.startswith("artist:"):
+                    na = na[7:]
+                if na:
+                    cleaned_negative_artists.add(na)
+                    cleaned_negative_artists.add(f"artist:{na}")
 
         all_candidates = []
         target_buffer = max(int(needed_count * 1.5), needed_count + 30)
@@ -719,10 +747,23 @@ class DeckGenerator:
                     skipped_from_history += 1
                     continue
 
-                # 3. Фильтрация по отрицательным тегам и активным щитам защиты
+                # 3. Фильтрация по отрицательным тегам, художникам и активным щитам защиты
                 post_tags = set(post.get("tags", "").lower().split())
                 if post_tags.intersection(cleaned_negatives):
                     continue
+                if cleaned_negative_artists and post_tags.intersection(cleaned_negative_artists):
+                    continue
+
+                # 3.1. Проверка авторства (если запрошен конкретный художник)
+                if clean_artist:
+                    has_artist_tag = (
+                        clean_artist in post_tags
+                        or f"artist:{clean_artist}" in post_tags
+                        or any(t == clean_artist or t == f"artist:{clean_artist}" for t in post_tags)
+                    )
+                    post_author = str(post.get("author", "") or post.get("artist", "")).lower().replace(" ", "_")
+                    if not has_artist_tag and post_author != clean_artist:
+                        continue
                 if filter_shock_content and any(is_shock_content_tag(t) for t in post_tags):
                     continue
                 if filter_weird_fetishes and any(is_weird_fetish_tag(t) for t in post_tags):
@@ -866,7 +907,9 @@ class DeckGenerator:
         filter_weird_fetishes: bool = True,
         content_mode: str = "balanced",
         filter_empty_center: bool = True,
-        fit_mode: str = "cover"
+        fit_mode: str = "cover",
+        artists: Optional[list[str]] = None,
+        negative_artists: Optional[list[str]] = None
     ) -> dict:
         self.is_running = True
         self.should_stop = False
@@ -885,18 +928,37 @@ class DeckGenerator:
         self.clean_old_sheets()
 
         clean_characters = [c.strip() for c in characters if c.strip()]
-        character_targets = []
+        clean_artists = [a.strip() for a in (artists or []) if a.strip()]
+        clean_neg_artists = [na.strip() for na in (negative_artists or []) if na.strip()]
+        generation_targets = []
 
-        if clean_characters:
+        if clean_characters and clean_artists:
+            combos = [(c, a) for c in clean_characters for a in clean_artists]
+            n_combos = len(combos)
+            base_count = total_cards // n_combos
+            remainder = total_cards % n_combos
+            for i, (c, a) in enumerate(combos):
+                count = base_count + (1 if i < remainder else 0)
+                if count > 0:
+                    generation_targets.append((c, a, count))
+        elif clean_characters:
             n_chars = len(clean_characters)
             base_count = total_cards // n_chars
             remainder = total_cards % n_chars
             for i, char in enumerate(clean_characters):
                 count = base_count + (1 if i < remainder else 0)
                 if count > 0:
-                    character_targets.append((char, count))
+                    generation_targets.append((char, None, count))
+        elif clean_artists:
+            n_art = len(clean_artists)
+            base_count = total_cards // n_art
+            remainder = total_cards % n_art
+            for i, art in enumerate(clean_artists):
+                count = base_count + (1 if i < remainder else 0)
+                if count > 0:
+                    generation_targets.append((None, art, count))
         else:
-            character_targets.append((None, total_cards))
+            generation_targets.append((None, None, total_cards))
 
         seen_post_ids = set()
         seen_api_hashes = set()
@@ -904,8 +966,8 @@ class DeckGenerator:
         seen_content_md5s = set()
         seen_visual_hashes = []
 
-        pools_by_char = []
-        for char, target_count in character_targets:
+        pools_by_target = []
+        for char, art, target_count in generation_targets:
             if self.should_stop:
                 break
             posts = self.fetch_candidate_posts(
@@ -924,11 +986,13 @@ class DeckGenerator:
                 log_callback=lambda msg: report(msg, 5),
                 filter_shock_content=filter_shock_content,
                 filter_weird_fetishes=filter_weird_fetishes,
-                content_mode=content_mode
+                content_mode=content_mode,
+                artist=art,
+                negative_artists=clean_neg_artists
             )
-            pools_by_char.append((char, target_count, posts))
+            pools_by_target.append((char, art, target_count, posts))
 
-        total_candidates_collected = sum(len(p[2]) for p in pools_by_char)
+        total_candidates_collected = sum(len(p[3]) for p in pools_by_target)
         if total_candidates_collected == 0:
             self.is_running = False
             report("Не удалось найти изображения по заданным критериям.", 0)
@@ -978,11 +1042,18 @@ class DeckGenerator:
         report(f"Параллельное скачивание карт (потоков: {max_workers})...", 10)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for char_name, target_count, candidate_posts in pools_by_char:
+            for char_name, art_name, target_count, candidate_posts in pools_by_target:
                 if self.should_stop or len(processed_cards) >= total_cards:
                     break
 
-                char_label = char_name if char_name else "Колода"
+                if char_name and art_name:
+                    char_label = f"{char_name} ({art_name})"
+                elif char_name:
+                    char_label = char_name
+                elif art_name:
+                    char_label = f"Художник: {art_name}"
+                else:
+                    char_label = "Колода"
                 downloaded_for_char = 0
                 post_iter = iter(candidate_posts)
                 futures = set()
@@ -1069,6 +1140,44 @@ class DeckGenerator:
                 # Отменяем незавершённые задачи для текущего пула перед переходом к следующему
                 for f in futures:
                     f.cancel()
+
+            # Добор недостающих карт из неиспользованных кандидатов всех пулов, если квота ещё не заполнена
+            if len(processed_cards) < total_cards and not self.should_stop:
+                for char_name, art_name, target_count, candidate_posts in pools_by_target:
+                    if len(processed_cards) >= total_cards or self.should_stop:
+                        break
+                    for p in candidate_posts:
+                        if len(processed_cards) >= total_cards or self.should_stop:
+                            break
+                        res = _fetch_candidate(p)
+                        if not res:
+                            continue
+                        c_md5 = res["content_md5"]
+                        if c_md5 in seen_content_md5s or c_md5 in self.history["seen_content_md5s"]:
+                            duplicate_count += 1
+                            continue
+                        dh = res["v_hash"]
+                        all_visual_hashes = seen_visual_hashes + self.history["seen_visual_hashes"]
+                        if is_visual_duplicate(dh, all_visual_hashes, threshold=4):
+                            duplicate_count += 1
+                            continue
+                        if filter_empty_center and is_empty_center_composition(res["raw_img"]):
+                            empty_center_skipped += 1
+                            continue
+                        seen_content_md5s.add(c_md5)
+                        seen_visual_hashes.append(dh)
+                        post = res["post"]
+                        if post.get("id"):
+                            new_post_ids.append(post["id"])
+                        if post.get("hash") or post.get("md5"):
+                            new_api_hashes.append(post.get("hash") or post.get("md5"))
+                        new_content_md5s.append(c_md5)
+                        new_visual_hashes.append(dh)
+                        card_img = self.prepare_card_image(res["raw_img"], card_width, card_height, fit_mode)
+                        processed_cards.append(card_img)
+                        card_num = len(processed_cards)
+                        photo_file = os.path.join(photos_dir, f"photo_{card_num:03d}.jpg")
+                        card_img.save(photo_file, "JPEG", quality=95)
 
         if duplicate_count > 0 or empty_center_skipped > 0:
             msgs = []

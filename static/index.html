@@ -133,6 +133,42 @@
               <textarea id="characters" rows="2" placeholder="Например: 2B, Tifa Lockhart, Makima, Yennefer"></textarea>
             </div>
 
+            <!-- Художники (Авторы) -->
+            <div class="form-group">
+              <div class="label-row">
+                <label for="positive_artists">
+                  Художники (включить)
+                  <button type="button" class="info-btn" data-tooltip="Никнеймы желаемых авторов через запятую. Карты будут отобраны из работ указанных художников. Если указаны и персонажи, будут искаться арты этих персонажей от данных авторов.">i</button>
+                </label>
+                <span id="artist-calc-badge" class="badge-subtle">Любые авторы</span>
+              </div>
+              <input type="text" id="positive_artists" placeholder="Например: sakimichan, dishwasher1910, ciloranko">
+              <div class="quick-chips">
+                <span class="chip-label">Популярные:</span>
+                <button type="button" class="chip" data-target="positive_artists" data-val="sakimichan">+ sakimichan</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="dishwasher1910">+ dishwasher1910</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="ciloranko">+ ciloranko</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="neoartcore">+ neoartcore</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="wlop">+ wlop</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="vicmon">+ vicmon</button>
+                <button type="button" class="chip" data-target="positive_artists" data-val="ratatatat74">+ ratatatat74</button>
+              </div>
+            </div>
+
+            <!-- Исключить художников -->
+            <div class="form-group">
+              <label for="negative_artists">
+                Исключить художников (чёрный список)
+                <button type="button" class="info-btn" data-tooltip="Никнеймы авторов, чьи работы нужно гарантированно исключить из колоды. Арты с их тегами будут сразу отсекаться.">i</button>
+              </label>
+              <input type="text" id="negative_artists" placeholder="Например: ugly_artist, bad_drawer">
+              <div class="quick-chips">
+                <span class="chip-label">Быстро:</span>
+                <button type="button" class="chip chip-neg" data-target="negative_artists" data-val="ai_generated">- ai_generated</button>
+                <button type="button" class="chip chip-neg" data-target="negative_artists" data-val="bad_artist">- bad_artist</button>
+              </div>
+            </div>
+
             <!-- Положительные теги -->
             <div class="form-group">
               <label for="positive_tags">
