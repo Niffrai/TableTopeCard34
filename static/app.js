@@ -55,6 +55,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let pollInterval = null;
   let lastLogCount = 0;
+  let isGenerating = false;
+
+  // Защита от случайного закрытия вкладки во время генерации
+  window.addEventListener("beforeunload", (e) => {
+    if (isGenerating) {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    }
+  });
 
   // --- 1. Синхронизация слайдера и числового поля (до 1024 карт) ---
   const MAX_PER_SHEET = 70;
@@ -481,6 +491,12 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (!data.success) {
+        if (data.error && data.error.includes("уже идёт")) {
+          setRunningState(true);
+          statusText.textContent = "Подключение к уже запущенной генерации...";
+          startPolling();
+          return;
+        }
         alert("Ошибка: " + (data.error || "Не удалось запустить"));
         setRunningState(false);
         return;
@@ -884,6 +900,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function setRunningState(running) {
+    isGenerating = running;
     if (running) {
       btnGenerate.classList.add("hidden");
       btnStop.classList.remove("hidden");
@@ -893,7 +910,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function showResults(result) {
+  function showResults(result, shouldScroll = true) {
     let summary = `Успешно создано ${result.total_cards} уникальных карт. Собрано листов: ${result.sheets.length}.`;
     if (result.duplicates_filtered) {
       summary += ` Отсеяно повторов: ${result.duplicates_filtered}.`;
@@ -915,8 +932,62 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     resultBox.classList.remove("hidden");
-    resultBox.scrollIntoView({ behavior: "smooth" });
+    if (shouldScroll) {
+      resultBox.scrollIntoView({ behavior: "smooth" });
+    }
     updateHistoryStats();
+  }
+
+  // Восстановление состояния при перезагрузке страницы или открытии после закрытия вкладки
+  async function checkInitialStatus() {
+    try {
+      const res = await fetch("/api/status");
+      const state = await res.json();
+
+      if (state.is_running) {
+        // Подключаемся к запущенной в фоне генерации
+        setRunningState(true);
+        resultBox.classList.add("hidden");
+        progressBar.style.width = `${state.percent}%`;
+        percentText.textContent = `${state.percent}%`;
+        statusText.textContent = state.status_message || "Генерация продолжается в фоне...";
+
+        if (state.logs && state.logs.length > 0) {
+          logsContainer.innerHTML = "";
+          state.logs.forEach(line => {
+            const div = document.createElement("div");
+            div.className = "log-line";
+            div.textContent = line;
+            logsContainer.appendChild(div);
+          });
+          lastLogCount = state.logs.length;
+          logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        startPolling();
+      } else if (state.result && state.result.success) {
+        // Восстанавливаем результат готовой генерации
+        progressBar.style.width = "100%";
+        percentText.textContent = "100%";
+        statusText.textContent = state.status_message || "Генерация завершена";
+        if (state.logs && state.logs.length > 0) {
+          logsContainer.innerHTML = "";
+          state.logs.forEach(line => {
+            const div = document.createElement("div");
+            div.className = "log-line";
+            div.textContent = line;
+            logsContainer.appendChild(div);
+          });
+          lastLogCount = state.logs.length;
+          logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+        showResults(state.result, false);
+      } else if (state.error) {
+        statusText.textContent = "Ошибка: " + state.error;
+      }
+    } catch (err) {
+      console.warn("Не удалось проверить статус при загрузке страницы:", err);
+    }
   }
 
   // --- ЭКСПОРТ ДЛЯ ДРУГА (.ZIP) ---
@@ -1038,4 +1109,5 @@ document.addEventListener("DOMContentLoaded", () => {
   updateCharacterAllocation();
   updateHistoryStats();
   loadInstalledDecks();
+  checkInitialStatus();
 });

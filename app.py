@@ -36,12 +36,34 @@ app_state = {
 }
 
 generator = DeckGenerator(OUTPUT_DIR)
+LAST_RESULT_FILE = os.path.join(OUTPUT_DIR, "last_deck_result.json")
+
 
 def append_log(message: str):
     timestamp = time.strftime("%H:%M:%S")
     app_state["logs"].append(f"[{timestamp}] {message}")
     if len(app_state["logs"]) > 200:
         app_state["logs"].pop(0)
+
+
+def load_cached_last_result():
+    global app_state
+    if os.path.exists(LAST_RESULT_FILE):
+        try:
+            with open(LAST_RESULT_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+            if saved and saved.get("success"):
+                app_state["result"] = saved
+                app_state["percent"] = 100
+                app_state["status_message"] = "Предыдущая колода готова"
+                total = saved.get("total_cards", 0)
+                sheets_cnt = len(saved.get("sheets", []))
+                append_log(f"Восстановлена предыдущая колода: {total} карт ({sheets_cnt} листов)")
+        except Exception as e:
+            print(f"[Warning] Failed to load {LAST_RESULT_FILE}: {e}")
+
+
+load_cached_last_result()
 
 def generation_worker(params: dict):
     global app_state
@@ -139,6 +161,11 @@ def generation_worker(params: dict):
             app_state["result"] = res
             app_state["status_message"] = "Генерация успешно завершена!"
             append_log(f"Успешно создано карт: {res.get('total_cards')}. Листов: {len(res.get('sheets', []))}")
+            try:
+                with open(LAST_RESULT_FILE, "w", encoding="utf-8") as rf:
+                    json.dump(res, rf, ensure_ascii=False, indent=2)
+            except Exception as e:
+                append_log(f"Предупреждение: не удалось сохранить кэш результата: {e}")
         else:
             app_state["error"] = res.get("error", "Произошла неизвестная ошибка")
             app_state["status_message"] = f"Ошибка: {app_state['error']}"
