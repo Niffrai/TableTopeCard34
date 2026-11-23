@@ -1361,6 +1361,121 @@ input[type="range"]::-webkit-slider-thumb:hover {
   color: #f87171;
 }
 
+.deck-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.deck-export-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.deck-export-btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-hover);
+  color: var(--text-heading);
+}
+
+/* Панель массовых действий с выбранными колодами */
+.installed-selection-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-hover);
+  padding: 10px 16px;
+  border-radius: var(--radius-card);
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+  animation: fadeIn 0.2s ease;
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.custom-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-heading);
+  cursor: pointer;
+  user-select: none;
+}
+
+.custom-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+}
+
+.selection-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  background: var(--accent-subtle);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deck-select-wrap {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  padding: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.deck-select-wrap:hover {
+  background: rgba(0, 0, 0, 0.85);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.deck-select-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  margin: 0;
+  accent-color: var(--accent-primary);
+}
+
+.deck-card.is-selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
 /* Empty State */
 .installed-empty-state {
   text-align: center;
@@ -1945,6 +2060,33 @@ body.theme-frutiger-aero .deck-meta-pill {
 
 body.theme-frutiger-aero .deck-card-footer {
   border-top-color: rgba(160, 210, 245, 0.6);
+}
+
+body.theme-frutiger-aero .installed-selection-bar {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(230, 245, 255, 0.7) 100%);
+  border-color: rgba(160, 210, 245, 0.9);
+  box-shadow: 0 4px 14px rgba(0, 40, 80, 0.08);
+}
+
+body.theme-frutiger-aero .deck-card.is-selected {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 2px #0284c7, 0 8px 24px rgba(2, 132, 199, 0.2);
+}
+
+body.theme-frutiger-aero .deck-select-wrap {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(160, 210, 245, 0.9);
+}
+
+body.theme-frutiger-aero .deck-export-btn {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(160, 210, 245, 0.8);
+  color: #0c436b;
+}
+
+body.theme-frutiger-aero .deck-export-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: #053154;
 }
 
 /* Modal Dialog */

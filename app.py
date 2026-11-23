@@ -46,6 +46,27 @@ def append_log(message: str):
         app_state["logs"].pop(0)
 
 
+def validate_current_result():
+    """Проверяет, существуют ли ещё на диске файлы сгенерированных листов колоды."""
+    global app_state
+    if app_state.get("result"):
+        sheets = app_state["result"].get("sheets", [])
+        all_exist = bool(sheets) and all(
+            os.path.exists(s.get("path", "")) and os.path.isfile(s.get("path", ""))
+            for s in sheets
+        )
+        if not all_exist:
+            app_state["result"] = None
+            if not app_state.get("is_running"):
+                app_state["status_message"] = "Готов к работе"
+                app_state["percent"] = 0
+            if os.path.exists(LAST_RESULT_FILE):
+                try:
+                    os.remove(LAST_RESULT_FILE)
+                except Exception:
+                    pass
+
+
 def load_cached_last_result():
     global app_state
     if os.path.exists(LAST_RESULT_FILE):
@@ -53,12 +74,23 @@ def load_cached_last_result():
             with open(LAST_RESULT_FILE, "r", encoding="utf-8") as f:
                 saved = json.load(f)
             if saved and saved.get("success"):
-                app_state["result"] = saved
-                app_state["percent"] = 100
-                app_state["status_message"] = "Предыдущая колода готова"
-                total = saved.get("total_cards", 0)
-                sheets_cnt = len(saved.get("sheets", []))
-                append_log(f"Восстановлена предыдущая колода: {total} карт ({sheets_cnt} листов)")
+                sheets = saved.get("sheets", [])
+                all_exist = bool(sheets) and all(
+                    os.path.exists(s.get("path", "")) and os.path.isfile(s.get("path", ""))
+                    for s in sheets
+                )
+                if all_exist:
+                    app_state["result"] = saved
+                    app_state["percent"] = 100
+                    app_state["status_message"] = "Предыдущая колода готова"
+                    total = saved.get("total_cards", 0)
+                    sheets_cnt = len(sheets)
+                    append_log(f"Восстановлена предыдущая колода: {total} карт ({sheets_cnt} листов)")
+                else:
+                    try:
+                        os.remove(LAST_RESULT_FILE)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[Warning] Failed to load {LAST_RESULT_FILE}: {e}")
 
@@ -422,6 +454,162 @@ def delete_single_deck(deck_type: str, filename: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | None, str | None, str | None]:
+    """Создает ZIP-архив отдельной колоды из Tabletop Simulator для отправки другу."""
+    saves_dir = find_tts_saves_dir()
+    if not saves_dir or not saves_dir.exists():
+        return None, None, "Папка сохранений Tabletop Simulator не найдена"
+
+    clean_file = os.path.basename(filename)
+    if not clean_file.endswith(".json"):
+        return None, None, "Недопустимый файл колоды"
+
+    if deck_type == "game":
+        target_dir = saves_dir
+        assets_base = saves_dir / "Deck_Assets"
+    elif deck_type == "saved_object":
+        target_dir = saves_dir / "Saved Objects"
+        assets_base = target_dir / "Deck_Assets"
+    else:
+        return None, None, "Неизвестный тип колоды"
+
+    json_path = target_dir / clean_file
+    if not json_path.exists():
+        return None, None, f"Файл {clean_file} не найден"
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as jf:
+            save_data = json.load(jf)
+    except Exception as e:
+        return None, None, f"Ошибка чтения файла сохранения: {e}"
+
+    save_name = save_data.get("SaveName") or ""
+    if not save_name and save_data.get("ObjectStates"):
+        save_name = save_data["ObjectStates"][0].get("Nickname") or ""
+    if not save_name:
+        save_name = clean_file.replace(".json", "")
+
+    clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name).strip() or "Custom_Deck"
+
+    specific_assets = assets_base / clean_name
+    if not specific_assets.exists():
+        specific_assets = saves_dir / "Deck_Assets" / clean_name
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("deck_save.json", json.dumps(save_data, ensure_ascii=False, indent=2))
+
+        png_path = target_dir / clean_file.replace(".json", ".png")
+        if png_path.exists():
+            z.write(str(png_path), f"{clean_name}.png")
+
+        added_files = set()
+        if specific_assets.exists():
+            for f in os.listdir(specific_assets):
+                fp = specific_assets / f
+                if fp.is_file() and fp.suffix.lower() in (".png", ".jpg", ".jpeg", ".json"):
+                    z.write(str(fp), f)
+                    added_files.add(f.lower())
+
+        def extract_file_uris(obj):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
+                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
+                        if os.path.exists(parsed_path) and os.path.isfile(parsed_path):
+                            bf = os.path.basename(parsed_path)
+                            if bf.lower() not in added_files:
+                                z.write(parsed_path, bf)
+                                added_files.add(bf.lower())
+                    else:
+                        extract_file_uris(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    extract_file_uris(item)
+
+        extract_file_uris(save_data)
+
+    buf.seek(0)
+    return buf, clean_name, None
+
+
+def unpack_and_import_deck_zip(zip_bytes: bytes, raw_filename: str, saves_dir: Path) -> dict:
+    """Распаковывает один ZIP-архив колоды и регистрирует его в Tabletop Simulator."""
+    deck_name = re.sub(r'(_TTS_Package)?\.zip$', '', raw_filename, flags=re.I).strip() or "Friend_Deck"
+    clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
+    assets_dir = saves_dir / "Deck_Assets" / clean_name
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
+        for item in z.infolist():
+            fname = os.path.basename(item.filename)
+            if not fname:
+                continue
+            if fname.endswith((".png", ".jpg", ".jpeg", ".json")):
+                target_file = assets_dir / fname
+                with open(target_file, "wb") as out_f:
+                    out_f.write(z.read(item.filename))
+
+    sheets = []
+    for fname in sorted(os.listdir(assets_dir)):
+        if fname.startswith("deck_sheet_") and fname.endswith(".png"):
+            fpath = assets_dir / fname
+            with Image.open(fpath) as img:
+                cols = 10
+                rows = math.ceil(img.height / 420)
+            sheets.append({
+                "filename": fname,
+                "path": str(fpath),
+                "file_uri": to_file_uri(str(fpath)),
+                "width": cols,
+                "height": rows,
+                "card_count": cols * rows
+            })
+
+    back_file = assets_dir / "card_back.png"
+    back_uri = to_file_uri(str(back_file)) if back_file.exists() else ""
+
+    table_file = assets_dir / "tier_table.png"
+    if not table_file.exists():
+        create_tier_table_image(str(table_file))
+    table_uri = to_file_uri(str(table_file))
+
+    sky_file = assets_dir / "custom_sky.jpg"
+    if not sky_file.exists():
+        create_dark_anime_skybox(str(sky_file))
+    sky_uri = to_file_uri(str(sky_file))
+
+    existing_numbers = []
+    for f in os.listdir(saves_dir):
+        m = re.search(r"^TS_Save_(\d+)\.json$", f)
+        if m:
+            existing_numbers.append(int(m.group(1)))
+
+    next_num = max(existing_numbers, default=0) + 1
+    save_json_file = saves_dir / f"TS_Save_{next_num}.json"
+    save_png_file = saves_dir / f"TS_Save_{next_num}.png"
+
+    generator.create_tts_deck_json(
+        json_path=str(save_json_file),
+        sheets=sheets,
+        back_url=back_uri,
+        deck_title=deck_name,
+        table_url=table_uri,
+        sky_url=sky_uri,
+        is_saved_game=True
+    )
+
+    if back_file.exists():
+        shutil.copy2(back_file, save_png_file)
+
+    return {
+        "success": True,
+        "save_num": next_num,
+        "save_file": str(save_json_file.name),
+        "save_name": deck_name
+    }
+
+
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -453,6 +641,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 return self._serve_file(full_file)
 
         if url_path == "/api/status":
+            validate_current_result()
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.end_headers()
@@ -465,6 +654,29 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if url_path == "/api/tts-decks":
             self._send_json({"success": True, "decks": get_tts_decks()})
+            return
+
+        if url_path == "/api/export-tts-deck":
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            d_type = qs.get("type", ["game"])[0]
+            d_file = qs.get("file", [""])[0] or qs.get("filename", [""])[0]
+            if not d_file:
+                self.send_error(400, "Параметр filename обязателен")
+                return
+
+            buf, clean_name, err = export_single_tts_deck(d_type, d_file)
+            if err or not buf:
+                self.send_error(404, err or "Ошибка экспорта колоды")
+                return
+
+            zip_bytes = buf.getvalue()
+            filename_enc = urllib.parse.quote(f"{clean_name}_TTS_Package.zip")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{filename_enc}")
+            self.send_header("Content-Length", str(len(zip_bytes)))
+            self.end_headers()
+            self.wfile.write(zip_bytes)
             return
 
         if url_path == "/api/tts-thumb":
@@ -596,6 +808,49 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         if url_path == "/api/stop":
             generator.should_stop = True
             self._send_json({"success": True, "message": "Остановка запрошена"})
+            return
+
+        # --- УДАЛЕНИЕ ФАЙЛОВ ТЕКУЩЕЙ СГЕНЕРИРОВАННОЙ КОЛОДЫ ---
+        if url_path == "/api/delete-current-deck":
+            deleted_sheets = 0
+            for fname in os.listdir(OUTPUT_DIR):
+                if fname.startswith("deck_sheet_") and fname.endswith(".png"):
+                    try:
+                        os.remove(os.path.join(OUTPUT_DIR, fname))
+                        deleted_sheets += 1
+                    except Exception:
+                        pass
+
+            photos_dir = os.path.join(OUTPUT_DIR, "photos")
+            if os.path.exists(photos_dir):
+                for pf in os.listdir(photos_dir):
+                    try:
+                        os.remove(os.path.join(photos_dir, pf))
+                    except Exception:
+                        pass
+
+            if os.path.exists(LAST_RESULT_FILE):
+                try:
+                    os.remove(LAST_RESULT_FILE)
+                except Exception:
+                    pass
+
+            tts_json = os.path.join(OUTPUT_DIR, "tts_saved_deck.json")
+            if os.path.exists(tts_json):
+                try:
+                    os.remove(tts_json)
+                except Exception:
+                    pass
+
+            app_state["result"] = None
+            app_state["status_message"] = "Готов к работе"
+            app_state["percent"] = 0
+            append_log("Файлы текущей колоды успешно удалены пользователем.")
+            self._send_json({
+                "success": True,
+                "message": "Файлы текущей колоды успешно удалены",
+                "deleted_sheets": deleted_sheets
+            })
             return
 
         if url_path in ("/api/open-folder", "/api/open-res-folder"):
@@ -891,84 +1146,33 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             try:
-                deck_name = re.sub(r'(_TTS_Package)?\.zip$', '', raw_filename, flags=re.I).strip() or "Friend_Deck"
-                clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
-
                 zip_bytes = base64.b64decode(zip_b64)
-                assets_dir = saves_dir / "Deck_Assets" / clean_name
-                assets_dir.mkdir(parents=True, exist_ok=True)
+                # Проверим, не является ли архив коллекцией нескольких ZIP-файлов
+                with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z_check:
+                    nested_zips = [item for item in z_check.infolist() if item.filename.lower().endswith(".zip")]
 
-                with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
-                    for item in z.infolist():
-                        fname = os.path.basename(item.filename)
-                        if not fname:
-                            continue
-                        if fname.endswith((".png", ".jpg", ".jpeg", ".json")):
-                            target_file = assets_dir / fname
-                            with open(target_file, "wb") as out_f:
-                                out_f.write(z.read(item.filename))
-
-                sheets = []
-                for fname in sorted(os.listdir(assets_dir)):
-                    if fname.startswith("deck_sheet_") and fname.endswith(".png"):
-                        fpath = assets_dir / fname
-                        with Image.open(fpath) as img:
-                            cols = 10
-                            rows = math.ceil(img.height / 420)
-                        sheets.append({
-                            "filename": fname,
-                            "path": str(fpath),
-                            "file_uri": to_file_uri(str(fpath)),
-                            "width": cols,
-                            "height": rows,
-                            "card_count": cols * rows
-                        })
-
-                back_file = assets_dir / "card_back.png"
-                back_uri = to_file_uri(str(back_file)) if back_file.exists() else ""
-
-                table_file = assets_dir / "tier_table.png"
-                if not table_file.exists():
-                    create_tier_table_image(str(table_file))
-                table_uri = to_file_uri(str(table_file))
-
-                sky_file = assets_dir / "custom_sky.jpg"
-                if not sky_file.exists():
-                    create_dark_anime_skybox(str(sky_file))
-                sky_uri = to_file_uri(str(sky_file))
-
-                existing_numbers = []
-                for f in os.listdir(saves_dir):
-                    m = re.search(r"^TS_Save_(\d+)\.json$", f)
-                    if m:
-                        existing_numbers.append(int(m.group(1)))
-
-                next_num = max(existing_numbers, default=0) + 1
-                save_json_file = saves_dir / f"TS_Save_{next_num}.json"
-                save_png_file = saves_dir / f"TS_Save_{next_num}.png"
-
-                generator.create_tts_deck_json(
-                    json_path=str(save_json_file),
-                    sheets=sheets,
-                    back_url=back_uri,
-                    deck_title=deck_name,
-                    table_url=table_uri,
-                    sky_url=sky_uri,
-                    is_saved_game=True
-                )
-
-                if back_file.exists():
-                    shutil.copy2(back_file, save_png_file)
-
-                self._send_json({
-                    "success": True,
-                    "save_num": next_num,
-                    "save_file": str(save_json_file.name),
-                    "save_name": deck_name
-                })
+                if nested_zips:
+                    results = []
+                    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z_coll:
+                        for n_item in nested_zips:
+                            n_bytes = z_coll.read(n_item.filename)
+                            res = unpack_and_import_deck_zip(n_bytes, os.path.basename(n_item.filename), saves_dir)
+                            results.append(res)
+                    self._send_json({
+                        "success": True,
+                        "is_collection": True,
+                        "count": len(results),
+                        "decks": results,
+                        "message": f"Успешно импортировано {len(results)} колод из архива-коллекции!"
+                    })
+                    return
+                else:
+                    res = unpack_and_import_deck_zip(zip_bytes, raw_filename, saves_dir)
+                    self._send_json(res)
+                    return
             except Exception as e:
                 self._send_json({"success": False, "error": f"Ошибка распаковки архива: {e}"}, 500)
-            return
+                return
 
         # --- УДАЛЕНИЕ ОДНОЙ ВЫБРАННОЙ КОЛОДЫ ИЗ TTS ---
         if url_path == "/api/delete-tts-deck":
@@ -977,6 +1181,80 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             ok, msg = delete_single_deck(d_type, d_file)
             self._send_json({"success": ok, "message": msg}, 200 if ok else 400)
             return
+
+        # --- МАССОВОЕ ВЫБОРОЧНОЕ УДАЛЕНИЕ КОЛОД ИЗ TTS ---
+        if url_path == "/api/delete-selected-tts-decks":
+            decks_to_delete = payload.get("decks", [])
+            if not decks_to_delete:
+                self._send_json({"success": False, "error": "Список колод пуст"}, 400)
+                return
+
+            deleted_count = 0
+            errors = []
+            for d in decks_to_delete:
+                d_type = d.get("type", "game")
+                d_file = d.get("filename") or d.get("file", "")
+                ok, msg = delete_single_deck(d_type, d_file)
+                if ok:
+                    deleted_count += 1
+                else:
+                    errors.append(f"{d_file}: {msg}")
+
+            self._send_json({
+                "success": True,
+                "deleted": deleted_count,
+                "total": len(decks_to_delete),
+                "errors": errors,
+                "message": f"Успешно удалено {deleted_count} из {len(decks_to_delete)} колод"
+            })
+            return
+
+        # --- МАССОВЫЙ ВЫБОРОЧНЫЙ ЭКСПОРТ КОЛОД ИЗ TTS ДЛЯ ДРУГА ---
+        if url_path == "/api/export-selected-tts-decks":
+            decks_to_export = payload.get("decks", [])
+            if not decks_to_export:
+                self._send_json({"success": False, "error": "Список колод пуст"}, 400)
+                return
+
+            if len(decks_to_export) == 1:
+                d = decks_to_export[0]
+                d_type = d.get("type", "game")
+                d_file = d.get("filename") or d.get("file", "")
+                buf, clean_name, err = export_single_tts_deck(d_type, d_file)
+                if err or not buf:
+                    self._send_json({"success": False, "error": err or "Ошибка экспорта"}, 400)
+                    return
+                b64_data = base64.b64encode(buf.getvalue()).decode("utf-8")
+                self._send_json({
+                    "success": True,
+                    "filename": f"{clean_name}_TTS_Package.zip",
+                    "data": b64_data
+                })
+                return
+            else:
+                master_buf = io.BytesIO()
+                with zipfile.ZipFile(master_buf, "w", zipfile.ZIP_DEFLATED) as master_zip:
+                    exported_count = 0
+                    for d in decks_to_export:
+                        d_type = d.get("type", "game")
+                        d_file = d.get("filename") or d.get("file", "")
+                        buf, clean_name, err = export_single_tts_deck(d_type, d_file)
+                        if buf and not err:
+                            master_zip.writestr(f"{clean_name}_TTS_Package.zip", buf.getvalue())
+                            exported_count += 1
+
+                if exported_count == 0:
+                    self._send_json({"success": False, "error": "Не удалось экспортировать ни одной колоды"}, 400)
+                    return
+
+                b64_data = base64.b64encode(master_buf.getvalue()).decode("utf-8")
+                self._send_json({
+                    "success": True,
+                    "filename": f"TTS_Decks_Collection_{time.strftime('%Y%m%d_%H%M%S')}.zip",
+                    "data": b64_data,
+                    "count": exported_count
+                })
+                return
 
         # --- ОТКРЫТИЕ ПАПКИ СОХРАНЕНИЙ TTS ---
         if url_path == "/api/open-tts-folder":

@@ -34,6 +34,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnClearHistory = document.getElementById("btn-clear-history");
   const historyCount = document.getElementById("history-count");
   const btnExportZip = document.getElementById("btn-export-zip");
+  const btnDeleteCurrentDeck = document.getElementById("btn-delete-current-deck");
   const btnImportZip = document.getElementById("btn-import-zip");
   const friendZipInput = document.getElementById("friend-zip-input");
   const btnShowGuide = document.getElementById("btn-show-guide");
@@ -518,6 +519,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // Удаление файлов текущей колоды (очистить результат)
+  if (btnDeleteCurrentDeck) {
+    btnDeleteCurrentDeck.addEventListener("click", async () => {
+      if (!confirm("Вы уверены, что хотите удалить файлы сгенерированной колоды (листы и исходные фото) и очистить результат?")) {
+        return;
+      }
+      btnDeleteCurrentDeck.disabled = true;
+      btnDeleteCurrentDeck.textContent = "Удаление...";
+      try {
+        const res = await fetch("/api/delete-current-deck", { method: "POST" });
+        const data = await res.json();
+        if (data.success) {
+          resultBox.classList.add("hidden");
+          sheetsList.innerHTML = "";
+          progressBar.style.width = "0%";
+          percentText.textContent = "0%";
+          statusText.textContent = "Готов к работе";
+          logsContainer.innerHTML = '<div class="log-line text-muted">[00:00:00] Готов к работе.</div>';
+          lastLogCount = 0;
+          updateHistoryStats();
+          alert("Файлы текущей колоды успешно удалены.");
+        } else {
+          alert("Ошибка: " + data.error);
+        }
+      } catch (e) {
+        alert("Сетевая ошибка: " + e.message);
+      } finally {
+        btnDeleteCurrentDeck.disabled = false;
+        btnDeleteCurrentDeck.textContent = "🗑️ Удалить файлы этой колоды (очистить)";
+      }
+    });
+  }
+
   // --- УПРАВЛЕНИЕ КНОПКАМИ ОТКРЫТИЯ ПАПОК ---
   async function handleOpenFolderAction(btn, endpoint) {
     if (!btn) return;
@@ -659,7 +693,50 @@ document.addEventListener("DOMContentLoaded", () => {
   const searchInput = document.getElementById("installed-search");
   const typeFilterSelect = document.getElementById("installed-type-filter");
 
+  // Элементы панели массовых действий с выбранными колодами
+  const selectionBar = document.getElementById("installed-selection-bar");
+  const selectAllCheckbox = document.getElementById("installed-select-all");
+  const selectAllText = document.getElementById("installed-select-all-text");
+  const selectedCountBadge = document.getElementById("installed-selected-count");
+  const btnExportSelected = document.getElementById("btn-export-selected-decks");
+  const btnDeleteSelected = document.getElementById("btn-delete-selected-decks");
+
   let allInstalledDecks = [];
+  const selectedDeckIds = new Set();
+
+  function getFilteredDecks() {
+    const query = (searchInput ? searchInput.value : "").trim().toLowerCase();
+    const typeFilter = typeFilterSelect ? typeFilterSelect.value : "all";
+
+    return allInstalledDecks.filter(d => {
+      const matchName = d.name.toLowerCase().includes(query) || d.filename.toLowerCase().includes(query);
+      const matchType = (typeFilter === "all") || (d.type === typeFilter);
+      return matchName && matchType;
+    });
+  }
+
+  function updateSelectionBar() {
+    if (!selectionBar) return;
+    const count = selectedDeckIds.size;
+    if (selectedCountBadge) {
+      selectedCountBadge.textContent = `Выбрано: ${count}`;
+    }
+
+    if (count > 0) {
+      selectionBar.classList.remove("hidden");
+    } else {
+      selectionBar.classList.add("hidden");
+    }
+
+    const visibleDecks = getFilteredDecks();
+    if (visibleDecks.length > 0 && visibleDecks.every(d => selectedDeckIds.has(d.id))) {
+      if (selectAllCheckbox) selectAllCheckbox.checked = true;
+      if (selectAllText) selectAllText.textContent = "Снять выбор";
+    } else {
+      if (selectAllCheckbox) selectAllCheckbox.checked = false;
+      if (selectAllText) selectAllText.textContent = "Выбрать все";
+    }
+  }
 
   async function loadInstalledDecks() {
     try {
@@ -672,6 +749,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (installedDecksBadge) {
         installedDecksBadge.textContent = allInstalledDecks.length;
       }
+      // Очищаем несуществующие выбранные ID
+      const existingIds = new Set(allInstalledDecks.map(d => d.id));
+      for (const id of Array.from(selectedDeckIds)) {
+        if (!existingIds.has(id)) selectedDeckIds.delete(id);
+      }
       renderInstalledDecks();
     } catch (e) {
       if (installedGrid) {
@@ -682,18 +764,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderInstalledDecks() {
     if (!installedGrid) return;
-    const query = (searchInput ? searchInput.value : "").trim().toLowerCase();
-    const typeFilter = typeFilterSelect ? typeFilterSelect.value : "all";
-
-    const filtered = allInstalledDecks.filter(d => {
-      const matchName = d.name.toLowerCase().includes(query) || d.filename.toLowerCase().includes(query);
-      const matchType = (typeFilter === "all") || (d.type === typeFilter);
-      return matchName && matchType;
-    });
+    const filtered = getFilteredDecks();
 
     if (filtered.length === 0) {
       installedGrid.innerHTML = "";
       if (installedEmpty) installedEmpty.classList.remove("hidden");
+      updateSelectionBar();
       return;
     }
 
@@ -702,7 +778,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     filtered.forEach(deck => {
       const card = document.createElement("div");
-      card.className = "deck-card";
+      const isSelected = selectedDeckIds.has(deck.id);
+      card.className = "deck-card" + (isSelected ? " is-selected" : "");
 
       const thumbHtml = deck.thumbnail_url
         ? `<img src="${deck.thumbnail_url}" class="deck-card-img" alt="${deck.name}">`
@@ -727,6 +804,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       card.innerHTML = `
         <div class="deck-card-top">
+          <label class="deck-select-wrap" title="Выбрать колоду">
+            <input type="checkbox" class="deck-select-checkbox" data-id="${deck.id}" ${isSelected ? "checked" : ""}>
+          </label>
           ${thumbHtml}
           <div class="deck-type-tag ${typeBadgeClass}">${typeLabel}</div>
         </div>
@@ -737,13 +817,39 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
           <div class="deck-card-footer">
             <span class="deck-file-text" title="${deck.filename}">${deck.filename}</span>
-            <button class="deck-delete-btn" data-type="${deck.type}" data-filename="${deck.filename}" data-name="${deck.name}">
-              Удалить
-            </button>
+            <div class="deck-card-actions">
+              <button class="deck-export-btn" data-type="${deck.type}" data-filename="${deck.filename}" data-name="${deck.name}" title="Экспортировать эту колоду для друга в .zip">
+                📦 Экспорт
+              </button>
+              <button class="deck-delete-btn" data-type="${deck.type}" data-filename="${deck.filename}" data-name="${deck.name}" title="Удалить колоду из Tabletop Simulator">
+                Удалить
+              </button>
+            </div>
           </div>
         </div>
       `;
 
+      // Чекбокс выбора
+      const chk = card.querySelector(".deck-select-checkbox");
+      chk.addEventListener("change", (e) => {
+        e.stopPropagation();
+        if (chk.checked) {
+          selectedDeckIds.add(deck.id);
+          card.classList.add("is-selected");
+        } else {
+          selectedDeckIds.delete(deck.id);
+          card.classList.remove("is-selected");
+        }
+        updateSelectionBar();
+      });
+
+      // Кнопка экспорта отдельной колоды в .zip для друга
+      const expBtn = card.querySelector(".deck-export-btn");
+      expBtn.addEventListener("click", () => {
+        window.location.href = `/api/export-tts-deck?type=${encodeURIComponent(deck.type)}&filename=${encodeURIComponent(deck.filename)}`;
+      });
+
+      // Кнопка удаления отдельной колоды
       const delBtn = card.querySelector(".deck-delete-btn");
       delBtn.addEventListener("click", async () => {
         if (!confirm(`Удалить колоду "${deck.name}" (${deck.filename}) из Tabletop Simulator?`)) {
@@ -759,6 +865,7 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           const resp = await res.json();
           if (resp.success) {
+            selectedDeckIds.delete(deck.id);
             loadInstalledDecks();
           } else {
             alert("Ошибка удаления: " + resp.message);
@@ -773,6 +880,114 @@ document.addEventListener("DOMContentLoaded", () => {
       });
 
       installedGrid.appendChild(card);
+    });
+
+    updateSelectionBar();
+  }
+
+  // Чекбокс «Выбрать все / Снять выбор»
+  if (selectAllCheckbox) {
+    selectAllCheckbox.addEventListener("change", () => {
+      const visible = getFilteredDecks();
+      if (selectAllCheckbox.checked) {
+        visible.forEach(d => selectedDeckIds.add(d.id));
+      } else {
+        visible.forEach(d => selectedDeckIds.delete(d.id));
+      }
+      renderInstalledDecks();
+    });
+  }
+
+  // Кнопка «Удалить выбранные»
+  if (btnDeleteSelected) {
+    btnDeleteSelected.addEventListener("click", async () => {
+      if (selectedDeckIds.size === 0) return;
+      const count = selectedDeckIds.size;
+      if (!confirm(`Вы действительно хотите удалить выбранные колоды (${count} шт.) из Tabletop Simulator?`)) {
+        return;
+      }
+
+      btnDeleteSelected.disabled = true;
+      btnDeleteSelected.textContent = "Удаление...";
+
+      const decksToDelete = allInstalledDecks
+        .filter(d => selectedDeckIds.has(d.id))
+        .map(d => ({ type: d.type, filename: d.filename }));
+
+      try {
+        const res = await fetch("/api/delete-selected-tts-decks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decks: decksToDelete })
+        });
+        const data = await res.json();
+        if (data.success) {
+          selectedDeckIds.clear();
+          alert(`Успешно удалено колод: ${data.deleted}`);
+          loadInstalledDecks();
+        } else {
+          alert("Ошибка удаления: " + (data.error || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Ошибка сети: " + err.message);
+      } finally {
+        btnDeleteSelected.disabled = false;
+        btnDeleteSelected.textContent = "🗑️ Удалить выбранные";
+      }
+    });
+  }
+
+  // Кнопка «Экспорт выбранных колод» для друга
+  if (btnExportSelected) {
+    btnExportSelected.addEventListener("click", async () => {
+      if (selectedDeckIds.size === 0) return;
+      const decksToExport = allInstalledDecks
+        .filter(d => selectedDeckIds.has(d.id))
+        .map(d => ({ type: d.type, filename: d.filename }));
+
+      if (decksToExport.length === 1) {
+        const d = decksToExport[0];
+        window.location.href = `/api/export-tts-deck?type=${encodeURIComponent(d.type)}&filename=${encodeURIComponent(d.filename)}`;
+        return;
+      }
+
+      btnExportSelected.disabled = true;
+      btnExportSelected.textContent = "Сборка архива...";
+
+      try {
+        const res = await fetch("/api/export-selected-tts-decks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decks: decksToExport })
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+          const byteCharacters = atob(data.data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: "application/zip" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = data.filename || "TTS_Decks_Collection.zip";
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 200);
+        } else {
+          alert("Ошибка экспорта: " + (data.error || "Неизвестная ошибка"));
+        }
+      } catch (err) {
+        alert("Ошибка сети при экспорте: " + err.message);
+      } finally {
+        btnExportSelected.disabled = false;
+        btnExportSelected.textContent = "📦 Экспорт выбранных";
+      }
     });
   }
 
@@ -797,6 +1012,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const res = await fetch("/api/delete-all-tts-decks", { method: "POST" });
         const data = await res.json();
         if (data.success) {
+          selectedDeckIds.clear();
           alert(`Очистка завершена!\nУдалено игр: ${data.deleted_games}\nУдалено объектов: ${data.deleted_objects}`);
           loadInstalledDecks();
         } else {
@@ -890,8 +1106,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (state.result && state.result.success) {
           showResults(state.result);
-        } else if (state.error) {
-          statusText.textContent = "Ошибка: " + state.error;
+        } else {
+          resultBox.classList.add("hidden");
+          sheetsList.innerHTML = "";
+          if (state.error) {
+            statusText.textContent = "Ошибка: " + state.error;
+          }
         }
       }
     } catch (err) {
@@ -982,8 +1202,12 @@ document.addEventListener("DOMContentLoaded", () => {
           logsContainer.scrollTop = logsContainer.scrollHeight;
         }
         showResults(state.result, false);
-      } else if (state.error) {
-        statusText.textContent = "Ошибка: " + state.error;
+      } else {
+        resultBox.classList.add("hidden");
+        sheetsList.innerHTML = "";
+        if (state.error) {
+          statusText.textContent = "Ошибка: " + state.error;
+        }
       }
     } catch (err) {
       console.warn("Не удалось проверить статус при загрузке страницы:", err);
@@ -1030,7 +1254,11 @@ document.addEventListener("DOMContentLoaded", () => {
           });
           const data = await res.json();
           if (data.success) {
-            alert(`Колода от друга успешно импортирована!\n\nСоздано сохранение игры Tabletop Simulator: #${data.save_num}\nФайл: "${data.save_file}" (${data.save_name})\n\nКак открыть в Tabletop Simulator:\n1. Запустите игру Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода друга появятся на столе без белых текстур.`);
+            if (data.is_collection) {
+              alert(`Архив-коллекция успешно импортирована!\nВсего добавлено колод: ${data.count}\n\nВсе колоды сохранены в Tabletop Simulator (Save & Load).`);
+            } else {
+              alert(`Колода от друга успешно импортирована!\n\nСоздано сохранение игры Tabletop Simulator: #${data.save_num}\nФайл: "${data.save_file}" (${data.save_name})\n\nКак открыть в Tabletop Simulator:\n1. Запустите игру Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода друга появятся на столе без белых текстур.`);
+            }
             loadInstalledDecks();
           } else {
             alert("Ошибка импорта архива: " + (data.error || "Неизвестная ошибка"));

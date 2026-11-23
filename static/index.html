@@ -403,6 +403,11 @@
                   Папка с листами (output)
                 </button>
               </div>
+              <div class="result-actions-row">
+                <button id="btn-delete-current-deck" class="btn btn-danger flex-1" title="Удалить сгенерированные файлы этой колоды (листы и исходные фото) и очистить результат">
+                  🗑️ Удалить файлы этой колоды (очистить)
+                </button>
+              </div>
             </div>
 
             <div class="sheets-gallery-title">Сгенерированные листы колоды:</div>
@@ -462,6 +467,25 @@
               <option value="game">Только игры (Save & Load)</option>
               <option value="saved_object">Только Saved Objects</option>
             </select>
+          </div>
+        </div>
+
+        <!-- Панель массовых действий с выбранными колодами -->
+        <div id="installed-selection-bar" class="installed-selection-bar hidden">
+          <div class="selection-info">
+            <label class="custom-checkbox-label">
+              <input type="checkbox" id="installed-select-all">
+              <span id="installed-select-all-text">Выбрать все</span>
+            </label>
+            <span class="selection-count-badge" id="installed-selected-count">Выбрано: 0</span>
+          </div>
+          <div class="selection-actions">
+            <button id="btn-export-selected-decks" class="btn btn-secondary btn-sm" title="Экспортировать выбранные колоды для друга в ZIP-архив">
+              📦 Экспорт выбранных
+            </button>
+            <button id="btn-delete-selected-decks" class="btn btn-danger btn-sm" title="Удалить выбранные колоды из Tabletop Simulator">
+              🗑️ Удалить выбранные
+            </button>
           </div>
         </div>
 
