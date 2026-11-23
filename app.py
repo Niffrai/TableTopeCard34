@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import urllib.parse
+import traceback
 import webbrowser
 import zipfile
 from pathlib import Path
@@ -617,7 +618,31 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Expires", "0")
         super().end_headers()
 
+    def handle_uncaught_error(self, exc: Exception):
+        tb = traceback.format_exc()
+        print(f"[ERROR] Uncaught exception in request handler:\n{tb}", file=sys.stderr)
+        try:
+            self._send_json({
+                "success": False,
+                "error": f"Внутренняя ошибка сервера: {exc}",
+                "traceback": tb
+            }, 500)
+        except Exception:
+            pass
+
     def do_GET(self):
+        try:
+            self._handle_get()
+        except Exception as exc:
+            self.handle_uncaught_error(exc)
+
+    def do_POST(self):
+        try:
+            self._handle_post()
+        except Exception as exc:
+            self.handle_uncaught_error(exc)
+
+    def _handle_get(self):
         url_path = self.path.split("?")[0]
 
         if url_path == "/" or url_path == "/index.html":
@@ -774,7 +799,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
         self.send_error(404, "Not Found")
 
-    def do_POST(self):
+    def _handle_post(self):
         url_path = self.path.split("?")[0]
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length) if content_length > 0 else b""

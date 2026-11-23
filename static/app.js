@@ -1,3 +1,104 @@
+// --- ГЛОБАЛЬНАЯ СИСТЕМА УВЕДОМЛЕНИЙ (TOAST NOTIFICATIONS) ---
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function showToast(message, type = "info", title = "", duration = 5000) {
+  const container = document.getElementById("toast-container");
+  if (!container) {
+    console.warn(`[Toast:${type}] ${title ? title + ': ' : ''}${message}`);
+    return;
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+
+  let iconSvg = "";
+  if (type === "error") {
+    iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+    if (!title) title = "Ошибка";
+  } else if (type === "success") {
+    iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
+    if (!title) title = "Успешно";
+  } else if (type === "warning") {
+    iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+    if (!title) title = "Внимание";
+  } else {
+    iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+    if (!title) title = "Информация";
+  }
+
+  toast.innerHTML = `
+    ${iconSvg}
+    <div class="toast-body">
+      <div class="toast-title">${escapeHtml(title)}</div>
+      <div class="toast-message">${escapeHtml(message)}</div>
+    </div>
+    <button type="button" class="toast-close" title="Закрыть">&times;</button>
+  `;
+
+  function closeToast() {
+    if (toast.classList.contains("toast-hiding")) return;
+    toast.classList.add("toast-hiding");
+    setTimeout(() => {
+      if (toast.parentElement) toast.parentElement.removeChild(toast);
+    }, 250);
+  }
+
+  const closeBtn = toast.querySelector(".toast-close");
+  if (closeBtn) closeBtn.addEventListener("click", closeToast);
+
+  container.appendChild(toast);
+
+  if (duration > 0) {
+    setTimeout(closeToast, duration);
+  }
+}
+
+// --- ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ СОБЫТИЙ НА ОШИБКИ (ERROR EVENT HANDLERS) ---
+window.addEventListener("error", (event) => {
+  console.error("Глобальный перехват ошибки (Window Error):", event.error || event.message);
+  const msg = event.error ? (event.error.message || String(event.error)) : (event.message || "Непредвиденная ошибка скрипта");
+  showToast(msg, "error", "Ошибка JavaScript");
+
+  const logs = document.getElementById("logs-container");
+  if (logs) {
+    const timestamp = new Date().toLocaleTimeString();
+    const div = document.createElement("div");
+    div.className = "log-line log-line-error";
+    div.style.color = "#ef4444";
+    div.textContent = `[${timestamp}] Ошибка интерфейса: ${msg}`;
+    logs.appendChild(div);
+    logs.scrollTop = logs.scrollHeight;
+  }
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  console.error("Глобальный перехват Promise rejection:", event.reason);
+  let msg = "Необработанная асинхронная ошибка";
+  if (event.reason) {
+    msg = event.reason.message || String(event.reason);
+  }
+  showToast(msg, "error", "Асинхронная ошибка");
+
+  const logs = document.getElementById("logs-container");
+  if (logs) {
+    const timestamp = new Date().toLocaleTimeString();
+    const div = document.createElement("div");
+    div.className = "log-line log-line-error";
+    div.style.color = "#ef4444";
+    div.textContent = `[${timestamp}] Ошибка промиса: ${msg}`;
+    logs.appendChild(div);
+    logs.scrollTop = logs.scrollHeight;
+  }
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   // Элементы формы
   const form = document.getElementById("gen-form");
@@ -47,6 +148,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const percentText = document.getElementById("percent-text");
   const statusText = document.getElementById("status-text");
   const logsContainer = document.getElementById("logs-container");
+  const errorBox = document.getElementById("error-box");
+  const errorMessageEl = document.getElementById("error-message");
+  const btnDismissError = document.getElementById("btn-dismiss-error");
+
+  let lastReportedError = null;
 
   // Элементы результатов
   const resultBox = document.getElementById("result-box");
@@ -476,6 +582,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setRunningState(true);
     resultBox.classList.add("hidden");
+    if (errorBox) errorBox.classList.add("hidden");
+    progressBar.classList.remove("error");
+    lastReportedError = null;
 
     // Полный сброс консоли и индикаторов для нового запуска
     lastLogCount = 0;
@@ -498,13 +607,13 @@ document.addEventListener("DOMContentLoaded", () => {
           startPolling();
           return;
         }
-        alert("Ошибка: " + (data.error || "Не удалось запустить"));
+        showToast(data.error || "Не удалось запустить", "error", "Ошибка запуска");
         setRunningState(false);
         return;
       }
       startPolling();
     } catch (err) {
-      alert("Сетевая ошибка: " + err.message);
+      showToast(err.message, "error", "Сетевая ошибка");
       setRunningState(false);
     }
   });
@@ -514,10 +623,19 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       await fetch("/api/stop", { method: "POST" });
       statusText.textContent = "Запрошена остановка...";
+      showToast("Запрошена остановка генерации", "warning", "Остановка");
     } catch (err) {
       console.error(err);
+      showToast(err.message, "error", "Ошибка при остановке");
     }
   });
+
+  // Закрытие блока ошибки генерации
+  if (btnDismissError) {
+    btnDismissError.addEventListener("click", () => {
+      if (errorBox) errorBox.classList.add("hidden");
+    });
+  }
 
   // Удаление файлов текущей колоды (очистить результат)
   if (btnDeleteCurrentDeck) {
@@ -532,19 +650,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.success) {
           resultBox.classList.add("hidden");
+          if (errorBox) errorBox.classList.add("hidden");
           sheetsList.innerHTML = "";
           progressBar.style.width = "0%";
+          progressBar.classList.remove("error");
           percentText.textContent = "0%";
           statusText.textContent = "Готов к работе";
           logsContainer.innerHTML = '<div class="log-line text-muted">[00:00:00] Готов к работе.</div>';
           lastLogCount = 0;
+          lastReportedError = null;
           updateHistoryStats();
-          alert("Файлы текущей колоды успешно удалены.");
+          showToast("Файлы текущей колоды успешно удалены", "success");
         } else {
-          alert("Ошибка: " + data.error);
+          showToast(data.error || "Неизвестная ошибка", "error", "Ошибка удаления");
         }
       } catch (e) {
-        alert("Сетевая ошибка: " + e.message);
+        showToast(e.message, "error", "Сетевая ошибка при удалении");
       } finally {
         btnDeleteCurrentDeck.disabled = false;
         btnDeleteCurrentDeck.textContent = "🗑️ Удалить файлы этой колоды (очистить)";
@@ -576,12 +697,12 @@ document.addEventListener("DOMContentLoaded", () => {
           btn.disabled = false;
         }, 1600);
       } else {
-        alert("Не удалось открыть папку:\n" + (data.error || "Неизвестная ошибка") + (data.path ? `\n\nПуть: ${data.path}` : ""));
+        showToast((data.error || "Неизвестная ошибка") + (data.path ? `\nПуть: ${data.path}` : ""), "error", "Не удалось открыть папку");
         btn.innerHTML = origHtml;
         btn.disabled = false;
       }
     } catch (err) {
-      alert("Ошибка запроса при открытии папки: " + err.message);
+      showToast("Ошибка запроса при открытии папки: " + err.message, "error");
       btn.innerHTML = origHtml;
       btn.disabled = false;
     }
@@ -618,13 +739,13 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Успешно!\nСохранено как ИГРА (Слот #${data.save_num}):\n"${data.save_name}"\n\nКак открыть в игре:\n1. Запустите Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода уже готовы.`);
+        showToast(`Сохранено как ИГРА (Слот #${data.save_num}): "${data.save_name}".\nВ TTS: Games → Save & Load.`, "success", "Игра сохранена!", 8000);
         loadInstalledDecks();
       } else {
-        alert("Ошибка сохранения игры: " + data.error);
+        showToast(data.error || "Не удалось сохранить игру", "error", "Ошибка сохранения");
       }
     } catch (err) {
-      alert("Ошибка: " + err.message);
+      showToast(err.message, "error", "Сетевая ошибка");
     } finally {
       btnSaveGame.disabled = false;
       btnSaveGame.textContent = "Сохранить как ИГРУ (Games → Save & Load)";
@@ -644,12 +765,12 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`Успешно!\nОбъект сохранён в Saved Objects под именем:\n"${data.object_name}"\n\nКак использовать:\nВ Tabletop Simulator на любом столе откройте Objects -> Saved Objects и вытащите колоду.`);
+        showToast(`Объект сохранён в Saved Objects под именем "${data.object_name}".\nВ TTS: Objects → Saved Objects.`, "success", "Объект сохранён!", 8000);
       } else {
-        alert("Ошибка сохранения объекта: " + data.error);
+        showToast(data.error || "Не удалось сохранить объект", "error", "Ошибка сохранения");
       }
     } catch (err) {
-      alert("Ошибка: " + err.message);
+      showToast(err.message, "error", "Сетевая ошибка");
     } finally {
       btnSaveObject.disabled = false;
       btnSaveObject.textContent = "Сохранить в Saved Objects";
@@ -866,14 +987,15 @@ document.addEventListener("DOMContentLoaded", () => {
           const resp = await res.json();
           if (resp.success) {
             selectedDeckIds.delete(deck.id);
+            showToast(`Колода "${deck.name}" удалена из TTS`, "info", "Удалено");
             loadInstalledDecks();
           } else {
-            alert("Ошибка удаления: " + resp.message);
+            showToast("Ошибка удаления: " + (resp.message || resp.error || "Неизвестная ошибка"), "error", "Ошибка удаления");
             delBtn.disabled = false;
             delBtn.textContent = "Удалить";
           }
         } catch (err) {
-          alert("Ошибка сети: " + err.message);
+          showToast("Ошибка сети: " + err.message, "error", "Сбой сети");
           delBtn.disabled = false;
           delBtn.textContent = "Удалить";
         }
@@ -923,13 +1045,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.success) {
           selectedDeckIds.clear();
-          alert(`Успешно удалено колод: ${data.deleted}`);
+          showToast(`Успешно удалено колод: ${data.deleted}`, "success");
           loadInstalledDecks();
         } else {
-          alert("Ошибка удаления: " + (data.error || "Неизвестная ошибка"));
+          showToast("Ошибка удаления: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка");
         }
       } catch (err) {
-        alert("Ошибка сети: " + err.message);
+        showToast("Ошибка сети: " + err.message, "error", "Сбой сети");
       } finally {
         btnDeleteSelected.disabled = false;
         btnDeleteSelected.textContent = "🗑️ Удалить выбранные";
@@ -979,11 +1101,12 @@ document.addEventListener("DOMContentLoaded", () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
           }, 200);
+          showToast("Архив с выбранными колодами успешно сформирован!", "success");
         } else {
-          alert("Ошибка экспорта: " + (data.error || "Неизвестная ошибка"));
+          showToast("Ошибка экспорта: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка экспорта");
         }
       } catch (err) {
-        alert("Ошибка сети при экспорте: " + err.message);
+        showToast("Ошибка сети при экспорте: " + err.message, "error", "Сбой сети");
       } finally {
         btnExportSelected.disabled = false;
         btnExportSelected.textContent = "📦 Экспорт выбранных";
@@ -1013,13 +1136,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.success) {
           selectedDeckIds.clear();
-          alert(`Очистка завершена!\nУдалено игр: ${data.deleted_games}\nУдалено объектов: ${data.deleted_objects}`);
+          showToast(`Очистка завершена! Удалено игр: ${data.deleted_games}, объектов: ${data.deleted_objects}`, "success", "Очистка TTS");
           loadInstalledDecks();
         } else {
-          alert("Ошибка: " + data.error);
+          showToast("Ошибка: " + data.error, "error", "Ошибка очистки");
         }
       } catch (e) {
-        alert("Ошибка сети: " + e.message);
+        showToast("Ошибка сети: " + e.message, "error", "Сбой сети");
       } finally {
         btnDeleteAllDecks.disabled = false;
         btnDeleteAllDecks.textContent = "Очистить все колоды из TTS";
@@ -1054,11 +1177,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.success) {
           await updateHistoryStats();
+          showToast("История уникальных карт успешно очищена.", "success");
         } else {
-          alert("Не удалось очистить историю: " + (data.error || "Неизвестная ошибка"));
+          showToast("Не удалось очистить историю: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка");
         }
       } catch (e) {
-        alert("Ошибка: " + e.message);
+        showToast("Ошибка: " + e.message, "error", "Сбой сети");
       } finally {
         btnClearHistory.disabled = false;
       }
@@ -1105,12 +1229,24 @@ document.addEventListener("DOMContentLoaded", () => {
         setRunningState(false);
 
         if (state.result && state.result.success) {
+          if (errorBox) errorBox.classList.add("hidden");
+          progressBar.classList.remove("error");
+          lastReportedError = null;
           showResults(state.result);
         } else {
           resultBox.classList.add("hidden");
           sheetsList.innerHTML = "";
           if (state.error) {
             statusText.textContent = "Ошибка: " + state.error;
+            progressBar.classList.add("error");
+            if (errorBox && errorMessageEl) {
+              errorMessageEl.textContent = state.error;
+              errorBox.classList.remove("hidden");
+            }
+            if (lastReportedError !== state.error) {
+              lastReportedError = state.error;
+              showToast(state.error, "error", "Ошибка генерации", 8000);
+            }
           }
         }
       }
@@ -1207,6 +1343,11 @@ document.addEventListener("DOMContentLoaded", () => {
         sheetsList.innerHTML = "";
         if (state.error) {
           statusText.textContent = "Ошибка: " + state.error;
+          progressBar.classList.add("error");
+          if (errorBox && errorMessageEl) {
+            errorMessageEl.textContent = state.error;
+            errorBox.classList.remove("hidden");
+          }
         }
       }
     } catch (err) {
@@ -1233,7 +1374,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!file) return;
 
       if (!file.name.toLowerCase().endsWith(".zip")) {
-        alert("Пожалуйста, выберите файл с расширением .zip");
+        showToast("Пожалуйста, выберите файл с расширением .zip", "warning", "Неверный формат");
         return;
       }
 
@@ -1255,16 +1396,16 @@ document.addEventListener("DOMContentLoaded", () => {
           const data = await res.json();
           if (data.success) {
             if (data.is_collection) {
-              alert(`Архив-коллекция успешно импортирована!\nВсего добавлено колод: ${data.count}\n\nВсе колоды сохранены в Tabletop Simulator (Save & Load).`);
+              showToast(`Архив-коллекция успешно импортирована! Добавлено колод: ${data.count}. Все колоды сохранены в Tabletop Simulator.`, "success", "Коллекция импортирована", 8000);
             } else {
-              alert(`Колода от друга успешно импортирована!\n\nСоздано сохранение игры Tabletop Simulator: #${data.save_num}\nФайл: "${data.save_file}" (${data.save_name})\n\nКак открыть в Tabletop Simulator:\n1. Запустите игру Tabletop Simulator\n2. Нажмите Create -> Singleplayer (или Multiplayer)\n3. Выберите Games -> Save & Load\n4. Загрузите сохранение "${data.save_file}" — стол Tier List и колода друга появятся на столе без белых текстур.`);
+              showToast(`Колода от друга успешно импортирована! Сохранение #${data.save_num} ("${data.save_file}"). Загрузите через Games -> Save & Load.`, "success", "Колода импортирована", 9000);
             }
             loadInstalledDecks();
           } else {
-            alert("Ошибка импорта архива: " + (data.error || "Неизвестная ошибка"));
+            showToast("Ошибка импорта архива: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка импорта");
           }
         } catch (err) {
-          alert("Сетевая ошибка при импорте: " + err.message);
+          showToast("Сетевая ошибка при импорте: " + err.message, "error", "Сбой сети");
         } finally {
           btnImportZip.disabled = false;
           btnImportZip.textContent = "Импорт архива";
@@ -1273,7 +1414,7 @@ document.addEventListener("DOMContentLoaded", () => {
       };
 
       reader.onerror = () => {
-        alert("Не удалось прочитать выбранный файл.");
+        showToast("Не удалось прочитать выбранный файл.", "error", "Ошибка чтения файла");
         btnImportZip.disabled = false;
         btnImportZip.textContent = "Импорт архива";
       };

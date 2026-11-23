@@ -367,6 +367,24 @@
             </div>
           </div>
 
+          <!-- Секция сообщения об ошибке генерации -->
+          <div id="error-box" class="error-box hidden">
+            <div class="error-alert">
+              <div class="error-mark">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="12"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+              </div>
+              <div class="error-info">
+                <h3>Произошла ошибка при генерации</h3>
+                <p id="error-message">Текст ошибки...</p>
+              </div>
+              <button type="button" id="btn-dismiss-error" class="error-dismiss-btn" title="Закрыть">&times;</button>
+            </div>
+          </div>
+
           <!-- Секция готового результата -->
           <div id="result-box" class="result-box hidden">
             <div class="result-alert">
@@ -555,6 +573,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Контейнер для всплывающих уведомлений об ошибках и событиях -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <script src="/static/app.js"></script>
 </body>
