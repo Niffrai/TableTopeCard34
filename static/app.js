@@ -651,7 +651,7 @@ document.addEventListener("DOMContentLoaded", () => {
         contentModeBadge.textContent = "🔥 Полный 18+";
         contentModeBadge.className = "badge-subtle badge-mode-explicit";
         if (updateInputs) {
-          posTagsInput.value = "highres, solo, nude, explicit";
+          posTagsInput.value = "highres, solo, nude";
           negTagsInput.value = "comic, bad_anatomy, lowres, 3d, text";
         }
       } else if (mode === "light") {
