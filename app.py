@@ -432,20 +432,22 @@ def repair_deck_json_geometry(data: dict, file_map: dict[str, Path]) -> bool:
     changed = False
 
     for obj in objs:
-        if obj.get("Name") != "DeckCustom":
+        if obj.get("Name") not in ("DeckCustom", "Deck"):
             continue
         cdeck = obj.get("CustomDeck", {})
         if not cdeck:
             continue
 
         sheet_entries = []
+        file_map_lower = {k.lower(): v for k, v in file_map.items()}
         for key, info in cdeck.items():
             face = info.get("FaceURL", "")
             if face.startswith("file:///"):
                 fname = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(face).path))
             else:
                 fname = os.path.basename(face)
-            fpath = file_map.get(fname)
+            unquoted = urllib.parse.unquote(fname)
+            fpath = file_map.get(fname) or file_map.get(unquoted) or file_map_lower.get(fname.lower()) or file_map_lower.get(unquoted.lower())
             sheet_entries.append((key, info, fname, fpath))
 
         if not sheet_entries or any(e[3] is None or not Path(e[3]).exists() for e in sheet_entries):
@@ -1150,6 +1152,8 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
     def handle_uncaught_error(self, exc: Exception):
+        if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            return
         tb = traceback.format_exc()
         print(f"[ERROR] Uncaught exception in request handler:\n{tb}", file=sys.stderr)
         try:
@@ -1164,12 +1168,16 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         try:
             self._handle_get()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
         except Exception as exc:
             self.handle_uncaught_error(exc)
 
     def do_POST(self):
         try:
             self._handle_post()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
         except Exception as exc:
             self.handle_uncaught_error(exc)
 
@@ -2043,10 +2051,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(500, f"Error reading file: {e}")
 
     def _send_json(self, data: dict, status: int = 200):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
 
 def main():
