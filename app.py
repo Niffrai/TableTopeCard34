@@ -16,7 +16,10 @@ import webbrowser
 import zipfile
 from pathlib import Path
 from PIL import Image
-from generator import DeckGenerator, to_file_uri, create_tier_table_image, create_dark_anime_skybox
+from generator import (
+    DeckGenerator, to_file_uri, create_tier_table_image, create_dark_anime_skybox,
+    get_tts_cache_filename, get_tts_mods_images_dir, get_deck_stable_id, sync_deck_assets_to_mod_cache
+)
 
 PORT = 5000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -283,6 +286,83 @@ def is_generator_deck(data: dict) -> bool:
     return False
 
 
+def sync_and_migrate_save_if_needed(fpath: Path, data: dict, assets_path: Path, saves_dir: Path) -> dict:
+    """Проверяет сохранение на наличие локальных file:/// путей.
+    Если найдены ассеты, регистрирует их в Mods/Images кэше и обновляет пути в JSON на виртуальные."""
+    if not assets_path or not assets_path.exists():
+        return data
+
+    needs_migration = False
+    def check_file_uris(obj):
+        nonlocal needs_migration
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
+                    needs_migration = True
+                    return
+                check_file_uris(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                check_file_uris(item)
+                if needs_migration:
+                    return
+
+    check_file_uris(data)
+
+    meta_file = assets_path / "deck_meta.json"
+    stable_id = None
+    if meta_file.exists():
+        try:
+            with open(meta_file, "r", encoding="utf-8") as mf:
+                stable_id = json.load(mf).get("deck_id")
+        except Exception:
+            pass
+
+    sample_sheet = assets_path / "deck_sheet_1.png"
+    if not stable_id:
+        deck_name = data.get("SaveName") or assets_path.name
+        stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
+
+    mods_images_dir = get_tts_mods_images_dir(saves_dir)
+    url_map = sync_deck_assets_to_mod_cache(assets_path, stable_id, mods_images_dir)
+
+    if not meta_file.exists() and url_map:
+        try:
+            with open(meta_file, "w", encoding="utf-8") as mf:
+                json.dump({
+                    "deck_id": stable_id,
+                    "deck_title": data.get("SaveName") or assets_path.name,
+                    "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+                    "version": 2
+                }, mf, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    if needs_migration and url_map:
+        def replace_file_uris(obj):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
+                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
+                        bf = os.path.basename(parsed_path)
+                        if bf in url_map:
+                            obj[k] = url_map[bf]
+                    else:
+                        replace_file_uris(v)
+            elif isinstance(obj, list):
+                for item in obj:
+                    replace_file_uris(item)
+
+        replace_file_uris(data)
+        try:
+            with open(fpath, "w", encoding="utf-8") as jf:
+                json.dump(data, jf, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"[WARN] Failed to rewrite save {fpath}: {e}")
+
+    return data
+
+
 def get_tts_decks() -> list[dict]:
     """Получает список всех колод, созданных или импортированных в Tabletop Simulator."""
     saves_dir = find_tts_saves_dir()
@@ -332,6 +412,13 @@ def get_tts_decks() -> list[dict]:
 
                     clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
                     assets_path = saves_dir / "Deck_Assets" / clean_name
+                    if not assets_path.exists():
+                        clean_alt = clean_name.replace(" ", "_")
+                        if (saves_dir / "Deck_Assets" / clean_alt).exists():
+                            assets_path = saves_dir / "Deck_Assets" / clean_alt
+
+                    if assets_path.exists():
+                        data = sync_and_migrate_save_if_needed(fpath, data, assets_path, saves_dir)
 
                     decks.append({
                         "id": f"game:{fname}",
@@ -389,6 +476,13 @@ def get_tts_decks() -> list[dict]:
 
                         clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
                         assets_path = so_dir / "Deck_Assets" / clean_name
+                        if not assets_path.exists():
+                            clean_alt = clean_name.replace(" ", "_")
+                            if (so_dir / "Deck_Assets" / clean_alt).exists():
+                                assets_path = so_dir / "Deck_Assets" / clean_alt
+
+                        if assets_path.exists():
+                            data = sync_and_migrate_save_if_needed(fpath, data, assets_path, saves_dir)
 
                         decks.append({
                             "id": f"saved_object:{fname}",
@@ -513,19 +607,60 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
         elif (saves_dir / "Deck_Assets" / clean_name_underscores).exists():
             specific_assets = saves_dir / "Deck_Assets" / clean_name_underscores
 
+    meta_file = specific_assets / "deck_meta.json"
+    stable_id = None
+    if meta_file.exists():
+        try:
+            with open(meta_file, "r", encoding="utf-8") as mf:
+                stable_id = json.load(mf).get("deck_id")
+        except Exception:
+            pass
+
+    sample_sheet = specific_assets / "deck_sheet_1.png" if specific_assets.exists() else None
+    if not stable_id:
+        stable_id = get_deck_stable_id(clean_name, sample_sheet if (sample_sheet and sample_sheet.exists()) else None)
+
+    mods_images_dir = get_tts_mods_images_dir(saves_dir)
+    url_map = sync_deck_assets_to_mod_cache(specific_assets, stable_id, mods_images_dir) if specific_assets.exists() else {}
+
+    def replace_file_uris(obj):
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
+                    if v.startswith("file:///"):
+                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
+                        bf = os.path.basename(parsed_path)
+                        if bf in url_map:
+                            obj[k] = url_map[bf]
+                else:
+                    replace_file_uris(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                replace_file_uris(item)
+
+    replace_file_uris(save_data)
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("deck_save.json", json.dumps(save_data, ensure_ascii=False, indent=2))
+        z.writestr("deck_meta.json", json.dumps({
+            "deck_id": stable_id,
+            "deck_title": save_name,
+            "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+            "version": 2
+        }, ensure_ascii=False, indent=2))
 
         png_path = target_dir / clean_file.replace(".json", ".png")
         if png_path.exists():
             z.write(str(png_path), f"{clean_name}.png")
 
-        added_files = set()
+        added_files = {"deck_save.json", "deck_meta.json", f"{clean_name.lower()}.png"}
         if specific_assets.exists():
             for f in os.listdir(specific_assets):
+                if f.lower() in added_files:
+                    continue
                 fp = specific_assets / f
-                if fp.is_file() and fp.suffix.lower() in (".png", ".jpg", ".jpeg", ".json"):
+                if fp.is_file() and fp.suffix.lower() in (".png", ".jpg", ".jpeg"):
                     z.write(str(fp), f)
                     added_files.add(f.lower())
 
@@ -552,7 +687,7 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
 
 
 def unpack_and_import_deck_zip(zip_bytes: bytes, raw_filename: str, saves_dir: Path) -> dict:
-    """Распаковывает один ZIP-архив колоды и регистрирует его в Tabletop Simulator."""
+    """Распаковывает один ZIP-архив колоды, регистрирует ассеты в кэше TTS (Mods/Images) и Tabletop Simulator."""
     deck_name = re.sub(r'(_TTS_Package)?\.zip$', '', raw_filename, flags=re.I).strip() or "Friend_Deck"
     clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
     assets_dir = saves_dir / "Deck_Assets" / clean_name
@@ -568,34 +703,35 @@ def unpack_and_import_deck_zip(zip_bytes: bytes, raw_filename: str, saves_dir: P
                 with open(target_file, "wb") as out_f:
                     out_f.write(z.read(item.filename))
 
-    sheets = []
-    for fname in sorted(os.listdir(assets_dir)):
-        if fname.startswith("deck_sheet_") and fname.endswith(".png"):
-            fpath = assets_dir / fname
-            with Image.open(fpath) as img:
-                cols = 10
-                rows = math.ceil(img.height / 420)
-            sheets.append({
-                "filename": fname,
-                "path": str(fpath),
-                "file_uri": to_file_uri(str(fpath)),
-                "width": cols,
-                "height": rows,
-                "card_count": cols * rows
-            })
+    meta_file = assets_dir / "deck_meta.json"
+    stable_id = None
+    if meta_file.exists():
+        try:
+            with open(meta_file, "r", encoding="utf-8") as mf:
+                mdata = json.load(mf)
+                stable_id = mdata.get("deck_id")
+                if mdata.get("deck_title"):
+                    deck_name = mdata["deck_title"]
+        except Exception:
+            pass
 
-    back_file = assets_dir / "card_back.png"
-    back_uri = to_file_uri(str(back_file)) if back_file.exists() else ""
+    sample_sheet = assets_dir / "deck_sheet_1.png"
+    if not stable_id:
+        stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
 
-    table_file = assets_dir / "tier_table.png"
-    if not table_file.exists():
-        create_tier_table_image(str(table_file))
-    table_uri = to_file_uri(str(table_file))
+    mods_images_dir = get_tts_mods_images_dir(saves_dir)
+    url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
 
-    sky_file = assets_dir / "custom_sky.jpg"
-    if not sky_file.exists():
-        create_dark_anime_skybox(str(sky_file))
-    sky_uri = to_file_uri(str(sky_file))
+    try:
+        with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
+            json.dump({
+                "deck_id": stable_id,
+                "deck_title": deck_name,
+                "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+                "version": 2
+            }, mf, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
 
     existing_numbers = []
     for f in os.listdir(saves_dir):
@@ -607,18 +743,81 @@ def unpack_and_import_deck_zip(zip_bytes: bytes, raw_filename: str, saves_dir: P
     save_json_file = saves_dir / f"TS_Save_{next_num}.json"
     save_png_file = saves_dir / f"TS_Save_{next_num}.png"
 
-    generator.create_tts_deck_json(
-        json_path=str(save_json_file),
-        sheets=sheets,
-        back_url=back_uri,
-        deck_title=deck_name,
-        table_url=table_uri,
-        sky_url=sky_uri,
-        is_saved_game=True
-    )
+    has_deck_save_json = False
+    if (assets_dir / "deck_save.json").exists():
+        try:
+            with open(assets_dir / "deck_save.json", "r", encoding="utf-8") as jf:
+                save_data = json.load(jf)
 
-    if back_file.exists():
-        shutil.copy2(back_file, save_png_file)
+            def replace_file_uris(obj):
+                if isinstance(obj, dict):
+                    for k, v in obj.items():
+                        if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
+                            bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(v).path)) if v.startswith("file:///") else os.path.basename(v)
+                            if bf in url_map:
+                                obj[k] = url_map[bf]
+                        else:
+                            replace_file_uris(v)
+                elif isinstance(obj, list):
+                    for item in obj:
+                        replace_file_uris(item)
+
+            replace_file_uris(save_data)
+            save_data["SaveName"] = deck_name
+            with open(save_json_file, "w", encoding="utf-8") as out_jf:
+                json.dump(save_data, out_jf, ensure_ascii=False, indent=2)
+            has_deck_save_json = True
+        except Exception as e:
+            print(f"[WARN] Failed to use deck_save.json: {e}")
+            has_deck_save_json = False
+
+    if not has_deck_save_json:
+        sheets = []
+        for fname in sorted(os.listdir(assets_dir)):
+            if fname.startswith("deck_sheet_") and fname.endswith(".png"):
+                fpath = assets_dir / fname
+                with Image.open(fpath) as img:
+                    cols = 10
+                    rows = math.ceil(img.height / 420)
+                sheets.append({
+                    "filename": fname,
+                    "path": str(fpath),
+                    "file_uri": url_map.get(fname, to_file_uri(str(fpath))),
+                    "width": cols,
+                    "height": rows,
+                    "card_count": cols * rows
+                })
+
+        back_file = assets_dir / "card_back.png"
+        back_uri = url_map.get("card_back.png", to_file_uri(str(back_file)) if back_file.exists() else "")
+
+        table_file = assets_dir / "tier_table.png"
+        if not table_file.exists():
+            create_tier_table_image(str(table_file))
+            url_map.update(sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir))
+        table_uri = url_map.get("tier_table.png", to_file_uri(str(table_file)))
+
+        sky_file = assets_dir / "custom_sky.jpg"
+        if not sky_file.exists():
+            create_dark_anime_skybox(str(sky_file))
+            url_map.update(sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir))
+        sky_uri = url_map.get("custom_sky.jpg", to_file_uri(str(sky_file)))
+
+        generator.create_tts_deck_json(
+            json_path=str(save_json_file),
+            sheets=sheets,
+            back_url=back_uri,
+            deck_title=deck_name,
+            table_url=table_uri,
+            sky_url=sky_uri,
+            is_saved_game=True
+        )
+
+    for icon_name in (f"{clean_name}.png", "card_back.png", "deck_sheet_1.png"):
+        icon_path = assets_dir / icon_name
+        if icon_path.exists():
+            shutil.copy2(icon_path, save_png_file)
+            break
 
     return {
         "success": True,
@@ -1029,6 +1228,28 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                     create_dark_anime_skybox(str(dst_sky))
                 sky_uri = to_file_uri(str(dst_sky))
 
+                sample_sheet = assets_dir / "deck_sheet_1.png"
+                stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
+                mods_images_dir = get_tts_mods_images_dir(saves_dir)
+                url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
+
+                with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
+                    json.dump({
+                        "deck_id": stable_id,
+                        "deck_title": deck_name,
+                        "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+                        "version": 2
+                    }, mf, ensure_ascii=False, indent=2)
+
+                for sheet in sheets:
+                    fname = sheet["filename"]
+                    if fname in url_map:
+                        sheet["file_uri"] = url_map[fname]
+
+                back_uri = url_map.get("card_back.png", back_uri)
+                table_uri = url_map.get("tier_table.png", table_uri)
+                sky_uri = url_map.get("custom_sky.jpg", sky_uri)
+
                 # Находим следующий свободный номер для TS_Save_X.json
                 existing_numbers = []
                 for f in os.listdir(saves_dir):
@@ -1117,6 +1338,26 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 if os.path.exists(src_back):
                     shutil.copy2(src_back, dst_back)
                 back_uri = to_file_uri(str(dst_back))
+
+                sample_sheet = assets_dir / "deck_sheet_1.png"
+                stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
+                mods_images_dir = get_tts_mods_images_dir(saved_objects_dir)
+                url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
+
+                with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
+                    json.dump({
+                        "deck_id": stable_id,
+                        "deck_title": deck_name,
+                        "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+                        "version": 2
+                    }, mf, ensure_ascii=False, indent=2)
+
+                for sheet in sheets:
+                    fname = sheet["filename"]
+                    if fname in url_map:
+                        sheet["file_uri"] = url_map[fname]
+
+                back_uri = url_map.get("card_back.png", back_uri)
 
                 obj_json_file = saved_objects_dir / f"{clean_name}.json"
                 obj_png_file = saved_objects_dir / f"{clean_name}.png"

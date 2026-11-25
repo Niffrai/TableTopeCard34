@@ -13,7 +13,7 @@ import urllib.request
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageFilter
 import numpy as np
 
@@ -83,6 +83,72 @@ def to_file_uri(file_path: str) -> str:
     """Преобразует локальный путь в корректный file:/// URI для Tabletop Simulator."""
     p = Path(file_path).resolve().as_posix()
     return f"file:///{p}"
+
+
+def get_tts_cache_filename(url: str) -> str:
+    """Вычисляет имя файла в кэше Tabletop Simulator (Mods/Images) по алгоритму TTS:
+    все не-буквенно-цифровые символы удаляются, расширение добавляется через точку."""
+    base, ext = os.path.splitext(url)
+    ext = ext.lstrip(".")
+    clean = re.sub(r'[^a-zA-Z0-9]', '', url)
+    return f"{clean}.{ext}" if ext else clean
+
+
+def get_tts_mods_images_dir(saves_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Возвращает путь к папке кэша Tabletop Simulator (Mods/Images)."""
+    if saves_dir:
+        p = Path(saves_dir)
+        if p.name.lower() == "saves":
+            mods_dir = p.parent / "Mods" / "Images"
+        elif p.name.lower() == "saved objects":
+            mods_dir = p.parent.parent / "Mods" / "Images"
+        elif (p / "Mods" / "Images").exists() or (p.parent / "Mods" / "Images").exists():
+            mods_dir = p / "Mods" / "Images" if (p / "Mods" / "Images").exists() else p.parent / "Mods" / "Images"
+        else:
+            mods_dir = Path.home() / "Documents" / "My Games" / "Tabletop Simulator" / "Mods" / "Images"
+    else:
+        mods_dir = Path.home() / "Documents" / "My Games" / "Tabletop Simulator" / "Mods" / "Images"
+    mods_dir.mkdir(parents=True, exist_ok=True)
+    return mods_dir
+
+
+def get_deck_stable_id(deck_name: str, sample_sheet=None) -> str:
+    """Генерирует стабильный идентификатор колоды, не зависящий от переименования ZIP-файла на диске."""
+    clean_title = re.sub(r'[^a-zA-Z0-9_]', '', deck_name.replace(" ", "_")).strip("_") or "Deck"
+    h = ""
+    if sample_sheet:
+        if isinstance(sample_sheet, bytes):
+            h = hashlib.sha256(sample_sheet).hexdigest()[:10]
+        elif isinstance(sample_sheet, (str, Path)) and os.path.exists(sample_sheet):
+            try:
+                with open(sample_sheet, "rb") as f:
+                    h = hashlib.sha256(f.read(65536)).hexdigest()[:10]
+            except Exception:
+                pass
+    if not h:
+        h = hashlib.sha256(deck_name.encode("utf-8")).hexdigest()[:10]
+    return f"{clean_title}_{h}"
+
+
+def sync_deck_assets_to_mod_cache(assets_dir: Path, stable_id: str, mods_images_dir: Path) -> dict:
+    """Копирует ассеты колоды в кэш Tabletop Simulator (Mods/Images) с виртуальными URL для мультиплеера."""
+    base_url = f"http://tts-card-generator.local/decks/{stable_id}"
+    url_map = {}
+    if not assets_dir.exists():
+        return url_map
+    for f in os.listdir(assets_dir):
+        if f.lower().endswith((".png", ".jpg", ".jpeg")):
+            fpath = assets_dir / f
+            vurl = f"{base_url}/{f}"
+            cname = get_tts_cache_filename(vurl)
+            target = mods_images_dir / cname
+            try:
+                if not target.exists() or target.stat().st_size != fpath.stat().st_size:
+                    shutil.copy2(fpath, target)
+            except Exception as e:
+                print(f"[WARN] Failed to cache {f}: {e}")
+            url_map[f] = vurl
+    return url_map
 
 
 def create_tier_table_image(output_path: str):
