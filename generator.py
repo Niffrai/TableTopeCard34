@@ -737,6 +737,11 @@ class DeckGenerator:
         api_type = source_info.get("api_type", "gelbooru")
         moebooru_ignored = {"highres", "solo", "1girl", "video", "-video"}
 
+        # Определяем максимальный лимит тегов для API поисковика
+        # Moebooru (Yande.re, Konachan) поддерживает до 6 тегов в поисковом запросе.
+        # Gelbooru / Rule34 / Xbooru / Safebooru свободно поддерживают до 12-15 тегов.
+        max_api_tags = 6 if api_type == "moebooru" else 12
+
         api_query_tags = []
         if character:
             clean_char = character.strip().lower().replace(" ", "_")
@@ -747,37 +752,47 @@ class DeckGenerator:
             clean_artist = artist.lstrip("@").strip().lower().replace(" ", "_")
             if clean_artist.startswith("artist:"):
                 clean_artist = clean_artist[7:]
-            if clean_artist and clean_artist not in api_query_tags and len(api_query_tags) < 3:
+            if clean_artist and clean_artist not in api_query_tags and len(api_query_tags) < max_api_tags:
                 api_query_tags.append(clean_artist)
 
+        # Резервируем слоты под служебные теги (рейтинг / -video / order:random)
+        reserved_slots = 1 if api_type != "moebooru" else (2 if not character and not artist else 1)
+        max_user_tags = max(1, max_api_tags - reserved_slots)
+
+        cleaned_positive_tags = []
+        unqueried_positive_tags = []
+
         for tag in positive_tags:
-            tag = tag.strip().lower().replace(" ", "_")
-            if not tag:
+            tag_clean = tag.strip().lower().replace(" ", "_")
+            if not tag_clean:
                 continue
-            if api_type == "moebooru" and tag in moebooru_ignored:
+            if api_type == "moebooru" and tag_clean in moebooru_ignored:
                 continue
-            if tag not in api_query_tags and len(api_query_tags) < 3:
-                api_query_tags.append(tag)
+            cleaned_positive_tags.append(tag_clean)
+            if tag_clean not in api_query_tags:
+                if len(api_query_tags) < max_user_tags:
+                    api_query_tags.append(tag_clean)
+                else:
+                    unqueried_positive_tags.append(tag_clean)
 
         # Рейтинги и служебные теги для Moebooru и Gelbooru
         if content_mode == "light":
             has_rating = any("rating:" in t for t in api_query_tags)
             if not has_rating:
-                if len(api_query_tags) >= 3:
-                    api_query_tags.pop()
-                if api_type == "moebooru":
-                    api_query_tags.append("-rating:e")
-                else:
-                    api_query_tags.append("-rating:explicit")
+                rating_tag = "-rating:e" if api_type == "moebooru" else "-rating:explicit"
+                if len(api_query_tags) >= max_api_tags:
+                    popped = api_query_tags.pop()
+                    unqueried_positive_tags.append(popped)
+                api_query_tags.append(rating_tag)
         elif content_mode == "explicit" and api_type == "moebooru":
-            if not any("rating:" in t for t in api_query_tags) and len(api_query_tags) < 3:
+            if not any("rating:" in t for t in api_query_tags) and len(api_query_tags) < max_api_tags:
                 api_query_tags.append("rating:e")
 
         if api_type == "moebooru":
-            if not character and not artist and len(api_query_tags) < 3 and "order:random" not in api_query_tags:
+            if not character and not artist and len(api_query_tags) < max_api_tags and "order:random" not in api_query_tags:
                 api_query_tags.append("order:random")
         else:
-            if len(api_query_tags) < 3 and "-video" not in api_query_tags:
+            if len(api_query_tags) < max_api_tags and "-video" not in api_query_tags:
                 api_query_tags.append("-video")
 
         tags_query_str = " ".join(api_query_tags)
@@ -947,6 +962,21 @@ class DeckGenerator:
                     continue
                 if filter_weird_fetishes and any(is_weird_fetish_tag(t) for t in post_tags):
                     continue
+
+                # 3.2. Проверка положительных тегов, которые не поместились в лимит запроса API
+                if unqueried_positive_tags:
+                    missing_pos = False
+                    for pt in unqueried_positive_tags:
+                        if pt in ("explicit", "rating:explicit", "rating:e"):
+                            if not (str(post.get("rating", "")).lower() in ("e", "explicit") or pt in post_tags):
+                                missing_pos = True
+                                break
+                        else:
+                            if pt not in post_tags and not any(pt in t for t in post_tags):
+                                missing_pos = True
+                                break
+                    if missing_pos:
+                        continue
 
                 # 4. Фильтр откровенности контента (полный откровенный 18+ vs горячий SFW без наготы)
                 if content_mode == "light":
