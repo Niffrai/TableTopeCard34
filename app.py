@@ -8,17 +8,23 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
+import urllib.request
 import traceback
 import webbrowser
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from PIL import Image
 from generator import (
     DeckGenerator, to_file_uri, create_tier_table_image, create_dark_anime_skybox,
-    get_tts_cache_filename, get_tts_mods_images_dir, get_deck_stable_id, sync_deck_assets_to_mod_cache
+    get_tts_cache_filename, get_tts_mods_images_dir, get_tts_mods_raw_dir, get_tts_meta_dir,
+    get_deck_stable_id, sync_deck_assets_to_mod_cache, sync_files_to_mod_cache,
+    natural_sheet_sort_key, detect_sheet_geometry
 )
 
 PORT = 5000
@@ -286,79 +292,337 @@ def is_generator_deck(data: dict) -> bool:
     return False
 
 
-def sync_and_migrate_save_if_needed(fpath: Path, data: dict, assets_path: Path, saves_dir: Path) -> dict:
-    """Проверяет сохранение на наличие локальных file:/// путей.
-    Если найдены ассеты, регистрирует их в Mods/Images кэше и обновляет пути в JSON на виртуальные."""
-    if not assets_path or not assets_path.exists():
-        return data
-
-    needs_migration = False
-    def check_file_uris(obj):
-        nonlocal needs_migration
+def extract_all_urls_from_save(data: dict) -> list[str]:
+    """Собирает все URL изображений (FaceURL, BackURL, TableURL, SkyURL) из JSON сохранения TTS."""
+    urls = []
+    def _walk(obj):
         if isinstance(obj, dict):
             for k, v in obj.items():
-                if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
-                    needs_migration = True
-                    return
-                check_file_uris(v)
+                if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v:
+                    urls.append(v)
+                else:
+                    _walk(v)
         elif isinstance(obj, list):
             for item in obj:
-                check_file_uris(item)
-                if needs_migration:
-                    return
+                _walk(item)
+    _walk(data)
+    return urls
 
-    check_file_uris(data)
 
-    meta_file = assets_path / "deck_meta.json"
-    stable_id = None
-    if meta_file.exists():
+def get_all_used_urls_in_tts(saves_dir: Path, exclude_file: Optional[Path] = None) -> set[str]:
+    """Возвращает множество всех URL, используемых во всех оставшихся сохранениях и Saved Objects TTS."""
+    used = set()
+    candidates = []
+    for p in saves_dir.glob("*.json"):
+        if p.name.lower() == "savefileinfos.json":
+            continue
+        candidates.append(p)
+    so_dir = saves_dir / "Saved Objects"
+    if so_dir.exists():
+        for p in so_dir.glob("*.json"):
+            candidates.append(p)
+
+    ex_res = exclude_file.resolve() if exclude_file else None
+    for p in candidates:
+        if ex_res and p.resolve() == ex_res:
+            continue
         try:
-            with open(meta_file, "r", encoding="utf-8") as mf:
-                stable_id = json.load(mf).get("deck_id")
+            with open(p, "r", encoding="utf-8") as jf:
+                d = json.load(jf)
+            used.update(extract_all_urls_from_save(d))
         except Exception:
             pass
+    return used
 
-    sample_sheet = assets_path / "deck_sheet_1.png"
-    if not stable_id:
-        deck_name = data.get("SaveName") or assets_path.name
-        stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
 
+def cleanup_unused_cache_files(urls_to_check: list[str], saves_dir: Path, exclude_file: Optional[Path] = None) -> tuple[int, int]:
+    """Удаляет файлы кэша (Mods/Images и Mods/Images Raw) для URL генератора, если они больше нигде не используются."""
+    if not urls_to_check:
+        return 0, 0
+    mods_img = get_tts_mods_images_dir(saves_dir)
+    mods_raw = get_tts_mods_raw_dir(saves_dir)
+    meta_dir = get_tts_meta_dir(saves_dir)
+
+    used_urls = get_all_used_urls_in_tts(saves_dir, exclude_file=exclude_file)
+    used_cnames = {get_tts_cache_filename(u).lower() for u in used_urls if u.startswith(("http://", "https://"))}
+    used_ids = set()
+    for u in used_urls:
+        m = re.search(r"tts-card-generator\.local/decks/([^/]+)/", u)
+        if m:
+            used_ids.add(m.group(1))
+
+    deleted = 0
+    freed = 0
+    checked_cnames = set()
+    checked_ids = set()
+
+    for u in urls_to_check:
+        if not isinstance(u, str) or "tts-card-generator.local" not in u:
+            continue
+        m = re.search(r"tts-card-generator\.local/decks/([^/]+)/", u)
+        if m:
+            did = m.group(1)
+            if did not in checked_ids and did not in used_ids:
+                checked_ids.add(did)
+                mf = meta_dir / f"{did}.json"
+                if mf.exists():
+                    try:
+                        os.remove(mf)
+                    except Exception:
+                        pass
+
+        cname = get_tts_cache_filename(u)
+        clow = cname.lower()
+        if clow in checked_cnames or clow in used_cnames:
+            continue
+        checked_cnames.add(clow)
+
+        img_f = mods_img / cname
+        if img_f.exists() and img_f.is_file():
+            try:
+                freed += img_f.stat().st_size
+                os.remove(img_f)
+                deleted += 1
+            except Exception:
+                pass
+
+        raw_stem = os.path.splitext(cname)[0]
+        raw_f = mods_raw / f"{raw_stem}.rawt"
+        if raw_f.exists() and raw_f.is_file():
+            try:
+                freed += raw_f.stat().st_size
+                os.remove(raw_f)
+                deleted += 1
+            except Exception:
+                pass
+
+    return deleted, freed
+
+
+def clean_save_file_infos(saves_dir: Path):
+    """Удаляет несуществующие и служебные записи (например, из Deck_Assets) из SaveFileInfos.json."""
+    info_path = saves_dir / "SaveFileInfos.json"
+    if not info_path.exists():
+        return
+    try:
+        with open(info_path, "r", encoding="utf-8") as f:
+            entries = json.load(f)
+        if not isinstance(entries, list):
+            return
+        cleaned = []
+        changed = False
+        for item in entries:
+            dpath = item.get("Directory", "")
+            norm = dpath.replace("//", "\\").replace("/", "\\")
+            if "\\Deck_Assets\\" in norm or not os.path.exists(norm):
+                changed = True
+                continue
+            cleaned.append(item)
+        if changed:
+            with open(info_path, "w", encoding="utf-8") as f:
+                json.dump(cleaned, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def repair_deck_json_geometry(data: dict, file_map: dict[str, Path]) -> bool:
+    """Проверяет и исправляет NumWidth/NumHeight/DeckIDs/ContainedObjects на основе реальных размеров листов."""
+    back_path = file_map.get("card_back.png")
+    objs = data.get("ObjectStates", [])
+    changed = False
+
+    for obj in objs:
+        if obj.get("Name") != "DeckCustom":
+            continue
+        cdeck = obj.get("CustomDeck", {})
+        if not cdeck:
+            continue
+
+        sheet_entries = []
+        for key, info in cdeck.items():
+            face = info.get("FaceURL", "")
+            if face.startswith("file:///"):
+                fname = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(face).path))
+            else:
+                fname = os.path.basename(face)
+            fpath = file_map.get(fname)
+            sheet_entries.append((key, info, fname, fpath))
+
+        if not sheet_entries or any(e[3] is None or not Path(e[3]).exists() for e in sheet_entries):
+            continue
+
+        sheet_entries.sort(key=lambda e: natural_sheet_sort_key(e[2]))
+
+        geoms = []
+        mismatch = False
+        total_expected_cards = 0
+        for idx, (old_key, info, fname, fpath) in enumerate(sheet_entries, start=1):
+            g = detect_sheet_geometry(fpath, back_path)
+            geoms.append((idx, old_key, info, fname, g))
+            total_expected_cards += g["card_count"]
+            if info.get("NumWidth") != g["width"] or info.get("NumHeight") != g["height"] or str(old_key) != str(idx):
+                mismatch = True
+
+        deck_ids = obj.get("DeckIDs", [])
+        if len(deck_ids) != total_expected_cards:
+            mismatch = True
+
+        if not mismatch:
+            continue
+
+        template_transform = {
+            "posX": 16.5, "posY": 1.5, "posZ": 0.0,
+            "rotX": 0.0, "rotY": 180.0, "rotZ": 180.0,
+            "scaleX": 1.0, "scaleY": 1.0, "scaleZ": 1.0
+        }
+        if obj.get("ContainedObjects"):
+            t0 = obj["ContainedObjects"][0].get("Transform")
+            if isinstance(t0, dict):
+                template_transform = t0
+
+        new_cdeck = {}
+        new_deck_ids = []
+        new_contained = []
+        card_counter = 0
+
+        for idx, old_key, info, fname, g in geoms:
+            entry = dict(info)
+            entry["NumWidth"] = g["width"]
+            entry["NumHeight"] = g["height"]
+            new_cdeck[str(idx)] = entry
+
+            for c_in_sheet in range(g["card_count"]):
+                card_counter += 1
+                cid = idx * 100 + c_in_sheet
+                new_deck_ids.append(cid)
+                new_contained.append({
+                    "Name": "Card",
+                    "Transform": dict(template_transform),
+                    "Nickname": f"Card {card_counter}",
+                    "CardID": cid,
+                    "CustomDeck": {str(idx): entry}
+                })
+
+        obj["CustomDeck"] = new_cdeck
+        obj["DeckIDs"] = new_deck_ids
+        obj["ContainedObjects"] = new_contained
+        obj["Description"] = f"Колода из {card_counter} карт ({len(geoms)} листов)."
+        if data.get("Note") and "Сгенерировано" in data["Note"]:
+            sname = data.get("SaveName") or obj.get("Nickname") or "Deck"
+            data["Note"] = f"Колода: {sname} ({card_counter} карт). Сгенерировано в Tabletop Simulator Deck Builder."
+        changed = True
+
+    return changed
+
+
+def sync_and_migrate_save_if_needed(fpath: Path, data: dict, assets_path: Optional[Path], saves_dir: Path) -> dict:
+    """Переводит старые сохранения на кэш Mods/Images (без дублирования в Deck_Assets),
+    дедуплицирует по контенту и исправляет геометрию листов (квадратные/пустые карты)."""
     mods_images_dir = get_tts_mods_images_dir(saves_dir)
-    url_map = sync_deck_assets_to_mod_cache(assets_path, stable_id, mods_images_dir)
+    meta_dir = get_tts_meta_dir(saves_dir)
 
-    if not meta_file.exists() and url_map:
+    file_map: dict[str, Path] = {}
+    if assets_path and assets_path.exists():
+        for f in os.listdir(assets_path):
+            fp = assets_path / f
+            if fp.is_file() and f.lower().endswith((".png", ".jpg", ".jpeg")):
+                file_map[f] = fp
+
+    old_urls = extract_all_urls_from_save(data)
+    for u in old_urls:
+        if u.startswith(("http://", "https://")):
+            fname = os.path.basename(u)
+            if fname not in file_map and fname.lower().endswith((".png", ".jpg", ".jpeg")):
+                cached = mods_images_dir / get_tts_cache_filename(u)
+                if cached.exists() and cached.is_file():
+                    file_map[fname] = cached
+
+    if not file_map:
+        return data
+
+    sheet_paths = [
+        file_map[fn] for fn in sorted(file_map.keys(), key=natural_sheet_sort_key)
+        if fn.lower().startswith("deck_sheet_")
+    ]
+    deck_name = data.get("SaveName") or (data.get("ObjectStates", [{}])[0].get("Nickname") if data.get("ObjectStates") else "") or fpath.stem
+    stable_id = get_deck_stable_id(deck_name, sheet_paths if sheet_paths else list(file_map.values())[0])
+
+    expected_prefix = f"http://tts-card-generator.local/decks/{stable_id}/"
+    needs_url_update = any(
+        u.startswith("file:///") or ("tts-card-generator.local" in u and not u.startswith(expected_prefix))
+        for u in old_urls
+    )
+    needs_cache_copy = any(
+        not (mods_images_dir / get_tts_cache_filename(f"{expected_prefix}{fn}")).exists()
+        for fn in file_map
+    )
+
+    if needs_cache_copy or needs_url_update:
+        url_map = sync_files_to_mod_cache(file_map, stable_id, mods_images_dir)
+    else:
+        url_map = {fn: f"{expected_prefix}{fn}" for fn in file_map}
+
+    meta_file = meta_dir / f"{stable_id}.json"
+    if not meta_file.exists():
         try:
             with open(meta_file, "w", encoding="utf-8") as mf:
                 json.dump({
                     "deck_id": stable_id,
-                    "deck_title": data.get("SaveName") or assets_path.name,
+                    "deck_title": deck_name,
                     "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
-                    "version": 2
+                    "version": 3
                 }, mf, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
-    if needs_migration and url_map:
-        def replace_file_uris(obj):
+    file_changed = False
+    if needs_url_update and url_map:
+        def replace_uris(obj):
+            nonlocal file_changed
             if isinstance(obj, dict):
                 for k, v in obj.items():
-                    if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
-                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
-                        bf = os.path.basename(parsed_path)
-                        if bf in url_map:
+                    if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
+                        if v.startswith("file:///"):
+                            bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(v).path))
+                        else:
+                            bf = os.path.basename(v)
+                        if bf in url_map and obj[k] != url_map[bf]:
                             obj[k] = url_map[bf]
+                            file_changed = True
                     else:
-                        replace_file_uris(v)
+                        replace_uris(v)
             elif isinstance(obj, list):
                 for item in obj:
-                    replace_file_uris(item)
+                    replace_uris(item)
+        replace_uris(data)
 
-        replace_file_uris(data)
+    if repair_deck_json_geometry(data, file_map):
+        file_changed = True
+
+    if file_changed:
         try:
             with open(fpath, "w", encoding="utf-8") as jf:
                 json.dump(data, jf, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"[WARN] Failed to rewrite save {fpath}: {e}")
+
+    if needs_url_update:
+        cleanup_unused_cache_files(old_urls, saves_dir)
+
+    if assets_path and assets_path.exists():
+        all_cached = all(
+            (mods_images_dir / get_tts_cache_filename(url_map[fn])).exists()
+            for fn in file_map if fn in url_map
+        )
+        if all_cached and not any(u.startswith("file:///") for u in extract_all_urls_from_save(data)):
+            try:
+                shutil.rmtree(assets_path, ignore_errors=True)
+                parent_da = assets_path.parent
+                if parent_da.exists() and not any(parent_da.iterdir()):
+                    parent_da.rmdir()
+                clean_save_file_infos(saves_dir)
+            except Exception:
+                pass
 
     return data
 
@@ -370,6 +634,7 @@ def get_tts_decks() -> list[dict]:
         return []
 
     decks = []
+    mods_images_dir = get_tts_mods_images_dir(saves_dir)
 
     # 1. Games (TS_Save_X.json в папке Saves/)
     try:
@@ -383,13 +648,21 @@ def get_tts_decks() -> list[dict]:
                     if not is_generator_deck(data):
                         continue
 
-                    objs = data.get("ObjectStates", [])
+                    save_name = data.get("SaveName") or fname.replace(".json", "")
+                    clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
+                    assets_path = saves_dir / "Deck_Assets" / clean_name
+                    if not assets_path.exists():
+                        clean_alt = clean_name.replace(" ", "_")
+                        if (saves_dir / "Deck_Assets" / clean_alt).exists():
+                            assets_path = saves_dir / "Deck_Assets" / clean_alt
 
+                    data = sync_and_migrate_save_if_needed(fpath, data, assets_path if assets_path.exists() else None, saves_dir)
+
+                    objs = data.get("ObjectStates", [])
                     png_file = fname.replace(".json", ".png")
                     png_path = saves_dir / png_file
                     thumb_url = f"/api/tts-thumb?type=game&file={png_file}" if png_path.exists() else None
 
-                    save_name = data.get("SaveName") or fname.replace(".json", "")
                     mtime = os.path.getmtime(fpath)
                     date_str = data.get("Date") or time.strftime("%d.%m.%Y %H:%M", time.localtime(mtime))
 
@@ -410,15 +683,11 @@ def get_tts_decks() -> list[dict]:
                     has_tier_table = data.get("Table") == "Table_Custom" and bool(data.get("TableURL"))
                     has_sky = bool(data.get("SkyURL"))
 
-                    clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
-                    assets_path = saves_dir / "Deck_Assets" / clean_name
-                    if not assets_path.exists():
-                        clean_alt = clean_name.replace(" ", "_")
-                        if (saves_dir / "Deck_Assets" / clean_alt).exists():
-                            assets_path = saves_dir / "Deck_Assets" / clean_alt
-
-                    if assets_path.exists():
-                        data = sync_and_migrate_save_if_needed(fpath, data, assets_path, saves_dir)
+                    urls = extract_all_urls_from_save(data)
+                    has_cached = assets_path.exists() or any(
+                        (mods_images_dir / get_tts_cache_filename(u)).exists()
+                        for u in urls if u.startswith(("http://", "https://"))
+                    )
 
                     decks.append({
                         "id": f"game:{fname}",
@@ -432,7 +701,7 @@ def get_tts_decks() -> list[dict]:
                         "has_tier_table": has_tier_table,
                         "has_sky": has_sky,
                         "thumbnail_url": thumb_url,
-                        "has_assets": assets_path.exists(),
+                        "has_assets": has_cached,
                         "mtime": mtime
                     })
                 except Exception:
@@ -455,7 +724,6 @@ def get_tts_decks() -> list[dict]:
                             continue
 
                         objs = data.get("ObjectStates", [])
-
                         png_file = fname.replace(".json", ".png")
                         png_path = so_dir / png_file
                         thumb_url = f"/api/tts-thumb?type=saved_object&file={png_file}" if png_path.exists() else None
@@ -463,6 +731,16 @@ def get_tts_decks() -> list[dict]:
                         save_name = data.get("SaveName") or (objs[0].get("Nickname") if objs else fname.replace(".json", ""))
                         if not save_name:
                             save_name = fname.replace(".json", "")
+
+                        clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
+                        assets_path = so_dir / "Deck_Assets" / clean_name
+                        if not assets_path.exists():
+                            clean_alt = clean_name.replace(" ", "_")
+                            if (so_dir / "Deck_Assets" / clean_alt).exists():
+                                assets_path = so_dir / "Deck_Assets" / clean_alt
+
+                        data = sync_and_migrate_save_if_needed(fpath, data, assets_path if assets_path.exists() else None, saves_dir)
+                        objs = data.get("ObjectStates", [])
 
                         mtime = os.path.getmtime(fpath)
                         date_str = data.get("Date") or time.strftime("%d.%m.%Y %H:%M", time.localtime(mtime))
@@ -474,15 +752,11 @@ def get_tts_decks() -> list[dict]:
                                 card_count += len(obj.get("DeckIDs", []))
                                 sheets_count += len(obj.get("CustomDeck", {}))
 
-                        clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name)
-                        assets_path = so_dir / "Deck_Assets" / clean_name
-                        if not assets_path.exists():
-                            clean_alt = clean_name.replace(" ", "_")
-                            if (so_dir / "Deck_Assets" / clean_alt).exists():
-                                assets_path = so_dir / "Deck_Assets" / clean_alt
-
-                        if assets_path.exists():
-                            data = sync_and_migrate_save_if_needed(fpath, data, assets_path, saves_dir)
+                        urls = extract_all_urls_from_save(data)
+                        has_cached = assets_path.exists() or any(
+                            (mods_images_dir / get_tts_cache_filename(u)).exists()
+                            for u in urls if u.startswith(("http://", "https://"))
+                        )
 
                         decks.append({
                             "id": f"saved_object:{fname}",
@@ -496,7 +770,7 @@ def get_tts_decks() -> list[dict]:
                             "has_tier_table": False,
                             "has_sky": False,
                             "thumbnail_url": thumb_url,
-                            "has_assets": assets_path.exists(),
+                            "has_assets": has_cached,
                             "mtime": mtime
                         })
                     except Exception:
@@ -509,7 +783,7 @@ def get_tts_decks() -> list[dict]:
 
 
 def delete_single_deck(deck_type: str, filename: str) -> tuple[bool, str]:
-    """Удаляет одну колоду (файл .json + .png и связанные ассеты)."""
+    """Удаляет одну колоду (файл .json + .png, Deck_Assets и неиспользуемый кэш Mods/Images + Images Raw)."""
     saves_dir = find_tts_saves_dir()
     if not saves_dir or not saves_dir.exists():
         return False, "Папка Saves не найдена"
@@ -534,9 +808,17 @@ def delete_single_deck(deck_type: str, filename: str) -> tuple[bool, str]:
         return False, f"Файл {clean_file} не найден"
 
     clean_name = ""
+    urls_in_deck = []
+    extra_asset_dirs = set()
     try:
         with open(json_file, "r", encoding="utf-8") as jf:
             d = json.load(jf)
+        urls_in_deck = extract_all_urls_from_save(d)
+        for u in urls_in_deck:
+            if u.startswith("file:///") and "Deck_Assets" in u:
+                p = Path(urllib.request.url2pathname(urllib.parse.urlparse(u).path))
+                if p.parent.parent.name == "Deck_Assets":
+                    extra_asset_dirs.add(p.parent)
         name = d.get("SaveName") or ""
         if not name and d.get("ObjectStates"):
             name = d["ObjectStates"][0].get("Nickname") or ""
@@ -551,11 +833,24 @@ def delete_single_deck(deck_type: str, filename: str) -> tuple[bool, str]:
             os.remove(png_file)
 
         if clean_name and assets_base.exists():
-            specific_assets = assets_base / clean_name
-            if specific_assets.exists():
-                shutil.rmtree(specific_assets, ignore_errors=True)
+            for cand in (clean_name, clean_name.replace(" ", "_")):
+                specific_assets = assets_base / cand
+                if specific_assets.exists():
+                    shutil.rmtree(specific_assets, ignore_errors=True)
+        for e_dir in extra_asset_dirs:
+            if e_dir.exists():
+                shutil.rmtree(e_dir, ignore_errors=True)
+        if assets_base.exists() and not any(assets_base.iterdir()):
+            try:
+                assets_base.rmdir()
+            except Exception:
+                pass
 
-        return True, "Колода успешно удалена"
+        deleted_cache, _ = cleanup_unused_cache_files(urls_in_deck, saves_dir)
+        clean_save_file_infos(saves_dir)
+
+        msg = f"Колода успешно удалена (очищено файлов кэша: {deleted_cache})" if deleted_cache else "Колода успешно удалена"
+        return True, msg
     except Exception as e:
         return False, str(e)
 
@@ -607,31 +902,46 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
         elif (saves_dir / "Deck_Assets" / clean_name_underscores).exists():
             specific_assets = saves_dir / "Deck_Assets" / clean_name_underscores
 
-    meta_file = specific_assets / "deck_meta.json"
-    stable_id = None
-    if meta_file.exists():
-        try:
-            with open(meta_file, "r", encoding="utf-8") as mf:
-                stable_id = json.load(mf).get("deck_id")
-        except Exception:
-            pass
-
-    sample_sheet = specific_assets / "deck_sheet_1.png" if specific_assets.exists() else None
-    if not stable_id:
-        stable_id = get_deck_stable_id(clean_name, sample_sheet if (sample_sheet and sample_sheet.exists()) else None)
-
     mods_images_dir = get_tts_mods_images_dir(saves_dir)
-    url_map = sync_deck_assets_to_mod_cache(specific_assets, stable_id, mods_images_dir) if specific_assets.exists() else {}
+    meta_dir = get_tts_meta_dir(saves_dir)
+
+    # Собираем все файлы колоды: из Mods/Images по ссылкам и из Deck_Assets (fallback)
+    file_map: dict[str, Path] = {}
+    if specific_assets.exists():
+        for f in os.listdir(specific_assets):
+            fp = specific_assets / f
+            if fp.is_file() and f.lower().endswith((".png", ".jpg", ".jpeg")):
+                file_map[f] = fp
+
+    for u in extract_all_urls_from_save(save_data):
+        if u.startswith(("http://", "https://")):
+            bf = os.path.basename(u)
+            if bf not in file_map and bf.lower().endswith((".png", ".jpg", ".jpeg")):
+                cached = mods_images_dir / get_tts_cache_filename(u)
+                if cached.exists() and cached.is_file():
+                    file_map[bf] = cached
+        elif u.startswith("file:///"):
+            parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(u).path)
+            if os.path.exists(parsed_path) and os.path.isfile(parsed_path):
+                bf = os.path.basename(parsed_path)
+                if bf not in file_map:
+                    file_map[bf] = Path(parsed_path)
+
+    sheet_paths = [
+        file_map[fn] for fn in sorted(file_map.keys(), key=natural_sheet_sort_key)
+        if fn.lower().startswith("deck_sheet_")
+    ]
+    stable_id = get_deck_stable_id(clean_name, sheet_paths if sheet_paths else (list(file_map.values())[0] if file_map else None))
+
+    url_map = sync_files_to_mod_cache(file_map, stable_id, mods_images_dir) if file_map else {}
 
     def replace_file_uris(obj):
         if isinstance(obj, dict):
             for k, v in obj.items():
                 if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
-                    if v.startswith("file:///"):
-                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
-                        bf = os.path.basename(parsed_path)
-                        if bf in url_map:
-                            obj[k] = url_map[bf]
+                    bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(v).path)) if v.startswith("file:///") else os.path.basename(v)
+                    if bf in url_map:
+                        obj[k] = url_map[bf]
                 else:
                     replace_file_uris(v)
         elif isinstance(obj, list):
@@ -639,6 +949,8 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
                 replace_file_uris(item)
 
     replace_file_uris(save_data)
+    if file_map:
+        repair_deck_json_geometry(save_data, file_map)
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -647,7 +959,7 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
             "deck_id": stable_id,
             "deck_title": save_name,
             "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
-            "version": 2
+            "version": 3
         }, ensure_ascii=False, indent=2))
 
         png_path = target_dir / clean_file.replace(".json", ".png")
@@ -655,169 +967,172 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
             z.write(str(png_path), f"{clean_name}.png")
 
         added_files = {"deck_save.json", "deck_meta.json", f"{clean_name.lower()}.png"}
-        if specific_assets.exists():
-            for f in os.listdir(specific_assets):
-                if f.lower() in added_files:
-                    continue
-                fp = specific_assets / f
-                if fp.is_file() and fp.suffix.lower() in (".png", ".jpg", ".jpeg"):
-                    z.write(str(fp), f)
-                    added_files.add(f.lower())
-
-        def extract_file_uris(obj):
-            if isinstance(obj, dict):
-                for k, v in obj.items():
-                    if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str) and v.startswith("file:///"):
-                        parsed_path = urllib.request.url2pathname(urllib.parse.urlparse(v).path)
-                        if os.path.exists(parsed_path) and os.path.isfile(parsed_path):
-                            bf = os.path.basename(parsed_path)
-                            if bf.lower() not in added_files:
-                                z.write(parsed_path, bf)
-                                added_files.add(bf.lower())
-                    else:
-                        extract_file_uris(v)
-            elif isinstance(obj, list):
-                for item in obj:
-                    extract_file_uris(item)
-
-        extract_file_uris(save_data)
+        for fname, fpath in sorted(file_map.items(), key=lambda kv: natural_sheet_sort_key(kv[0])):
+            if fname.lower() in added_files:
+                continue
+            if fpath.exists() and fpath.is_file():
+                z.write(str(fpath), fname)
+                added_files.add(fname.lower())
 
     buf.seek(0)
     return buf, clean_name, None
 
 
 def unpack_and_import_deck_zip(zip_bytes: bytes, raw_filename: str, saves_dir: Path) -> dict:
-    """Распаковывает один ZIP-архив колоды, регистрирует ассеты в кэше TTS (Mods/Images) и Tabletop Simulator."""
+    """Распаковывает один ZIP-архив колоды, регистрирует ассеты только в кэше TTS (Mods/Images) и чинит геометрию."""
     deck_name = re.sub(r'(_TTS_Package)?\.zip$', '', raw_filename, flags=re.I).strip() or "Friend_Deck"
     clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
-    assets_dir = saves_dir / "Deck_Assets" / clean_name
-    assets_dir.mkdir(parents=True, exist_ok=True)
+    mods_images_dir = get_tts_mods_images_dir(saves_dir)
+    meta_dir = get_tts_meta_dir(saves_dir)
 
-    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
-        for item in z.infolist():
-            fname = os.path.basename(item.filename)
-            if not fname:
-                continue
-            if fname.endswith((".png", ".jpg", ".jpeg", ".json")):
-                target_file = assets_dir / fname
-                with open(target_file, "wb") as out_f:
-                    out_f.write(z.read(item.filename))
+    with tempfile.TemporaryDirectory() as tmp_dir_str:
+        tmp_dir = Path(tmp_dir_str)
+        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as z:
+            for item in z.infolist():
+                fname = os.path.basename(item.filename)
+                if not fname:
+                    continue
+                if fname.lower().endswith((".png", ".jpg", ".jpeg", ".json")):
+                    target_file = tmp_dir / fname
+                    with open(target_file, "wb") as out_f:
+                        out_f.write(z.read(item.filename))
 
-    meta_file = assets_dir / "deck_meta.json"
-    stable_id = None
-    if meta_file.exists():
+        meta_file = tmp_dir / "deck_meta.json"
+        if meta_file.exists():
+            try:
+                with open(meta_file, "r", encoding="utf-8") as mf:
+                    mdata = json.load(mf)
+                    if mdata.get("deck_title"):
+                        deck_name = mdata["deck_title"]
+                        clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
+            except Exception:
+                pass
+
+        # Гарантируем наличие стола и неба
+        table_file = tmp_dir / "tier_table.png"
+        if not table_file.exists():
+            create_tier_table_image(str(table_file))
+        sky_file = tmp_dir / "custom_sky.jpg"
+        if not sky_file.exists():
+            create_dark_anime_skybox(str(sky_file))
+
+        referenced_names = set()
+        if (tmp_dir / "deck_save.json").exists():
+            try:
+                with open(tmp_dir / "deck_save.json", "r", encoding="utf-8") as jf:
+                    for u in extract_all_urls_from_save(json.load(jf)):
+                        bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(u).path)) if u.startswith("file:///") else os.path.basename(u)
+                        if bf:
+                            referenced_names.add(bf.lower())
+            except Exception:
+                pass
+
+        known_assets = {"card_back.png", "tier_table.png", "custom_sky.jpg"}
+        file_map = {
+            f: tmp_dir / f
+            for f in os.listdir(tmp_dir)
+            if f.lower().endswith((".png", ".jpg", ".jpeg"))
+            and (tmp_dir / f).is_file()
+            and (f.lower().startswith("deck_sheet_") or f.lower() in known_assets or f.lower() in referenced_names)
+        }
+        sheet_paths = [
+            file_map[fn] for fn in sorted(file_map.keys(), key=natural_sheet_sort_key)
+            if fn.lower().startswith("deck_sheet_")
+        ]
+        stable_id = get_deck_stable_id(deck_name, sheet_paths if sheet_paths else (list(file_map.values())[0] if file_map else None))
+
+        url_map = sync_files_to_mod_cache(file_map, stable_id, mods_images_dir)
+
         try:
-            with open(meta_file, "r", encoding="utf-8") as mf:
-                mdata = json.load(mf)
-                stable_id = mdata.get("deck_id")
-                if mdata.get("deck_title"):
-                    deck_name = mdata["deck_title"]
+            with open(meta_dir / f"{stable_id}.json", "w", encoding="utf-8") as mf:
+                json.dump({
+                    "deck_id": stable_id,
+                    "deck_title": deck_name,
+                    "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
+                    "version": 3
+                }, mf, ensure_ascii=False, indent=2)
         except Exception:
             pass
 
-    sample_sheet = assets_dir / "deck_sheet_1.png"
-    if not stable_id:
-        stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
+        existing_numbers = []
+        for f in os.listdir(saves_dir):
+            m = re.search(r"^TS_Save_(\d+)\.json$", f)
+            if m:
+                existing_numbers.append(int(m.group(1)))
 
-    mods_images_dir = get_tts_mods_images_dir(saves_dir)
-    url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
+        next_num = max(existing_numbers, default=0) + 1
+        save_json_file = saves_dir / f"TS_Save_{next_num}.json"
+        save_png_file = saves_dir / f"TS_Save_{next_num}.png"
 
-    try:
-        with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
-            json.dump({
-                "deck_id": stable_id,
-                "deck_title": deck_name,
-                "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
-                "version": 2
-            }, mf, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        has_deck_save_json = False
+        if (tmp_dir / "deck_save.json").exists():
+            try:
+                with open(tmp_dir / "deck_save.json", "r", encoding="utf-8") as jf:
+                    save_data = json.load(jf)
 
-    existing_numbers = []
-    for f in os.listdir(saves_dir):
-        m = re.search(r"^TS_Save_(\d+)\.json$", f)
-        if m:
-            existing_numbers.append(int(m.group(1)))
+                def replace_file_uris(obj):
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
+                                bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(v).path)) if v.startswith("file:///") else os.path.basename(v)
+                                if bf in url_map:
+                                    obj[k] = url_map[bf]
+                            else:
+                                replace_file_uris(v)
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            replace_file_uris(item)
 
-    next_num = max(existing_numbers, default=0) + 1
-    save_json_file = saves_dir / f"TS_Save_{next_num}.json"
-    save_png_file = saves_dir / f"TS_Save_{next_num}.png"
+                replace_file_uris(save_data)
+                repair_deck_json_geometry(save_data, file_map)
+                save_data["SaveName"] = deck_name
+                with open(save_json_file, "w", encoding="utf-8") as out_jf:
+                    json.dump(save_data, out_jf, ensure_ascii=False, indent=2)
+                has_deck_save_json = True
+            except Exception as e:
+                print(f"[WARN] Failed to use deck_save.json: {e}")
+                has_deck_save_json = False
 
-    has_deck_save_json = False
-    if (assets_dir / "deck_save.json").exists():
-        try:
-            with open(assets_dir / "deck_save.json", "r", encoding="utf-8") as jf:
-                save_data = json.load(jf)
-
-            def replace_file_uris(obj):
-                if isinstance(obj, dict):
-                    for k, v in obj.items():
-                        if k in ("FaceURL", "BackURL", "TableURL", "SkyURL") and isinstance(v, str):
-                            bf = os.path.basename(urllib.request.url2pathname(urllib.parse.urlparse(v).path)) if v.startswith("file:///") else os.path.basename(v)
-                            if bf in url_map:
-                                obj[k] = url_map[bf]
-                        else:
-                            replace_file_uris(v)
-                elif isinstance(obj, list):
-                    for item in obj:
-                        replace_file_uris(item)
-
-            replace_file_uris(save_data)
-            save_data["SaveName"] = deck_name
-            with open(save_json_file, "w", encoding="utf-8") as out_jf:
-                json.dump(save_data, out_jf, ensure_ascii=False, indent=2)
-            has_deck_save_json = True
-        except Exception as e:
-            print(f"[WARN] Failed to use deck_save.json: {e}")
-            has_deck_save_json = False
-
-    if not has_deck_save_json:
-        sheets = []
-        for fname in sorted(os.listdir(assets_dir)):
-            if fname.startswith("deck_sheet_") and fname.endswith(".png"):
-                fpath = assets_dir / fname
-                with Image.open(fpath) as img:
-                    cols = 10
-                    rows = math.ceil(img.height / 420)
+        if not has_deck_save_json:
+            back_file = tmp_dir / "card_back.png"
+            sheets = []
+            sheet_names = sorted(
+                [fn for fn in file_map if fn.lower().startswith("deck_sheet_") and fn.lower().endswith(".png")],
+                key=natural_sheet_sort_key
+            )
+            for fname in sheet_names:
+                fpath = file_map[fname]
+                geom = detect_sheet_geometry(fpath, back_file if back_file.exists() else None)
                 sheets.append({
                     "filename": fname,
                     "path": str(fpath),
                     "file_uri": url_map.get(fname, to_file_uri(str(fpath))),
-                    "width": cols,
-                    "height": rows,
-                    "card_count": cols * rows
+                    "width": geom["width"],
+                    "height": geom["height"],
+                    "card_count": geom["card_count"]
                 })
 
-        back_file = assets_dir / "card_back.png"
-        back_uri = url_map.get("card_back.png", to_file_uri(str(back_file)) if back_file.exists() else "")
+            back_uri = url_map.get("card_back.png", "")
+            table_uri = url_map.get("tier_table.png", "")
+            sky_uri = url_map.get("custom_sky.jpg", "")
 
-        table_file = assets_dir / "tier_table.png"
-        if not table_file.exists():
-            create_tier_table_image(str(table_file))
-            url_map.update(sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir))
-        table_uri = url_map.get("tier_table.png", to_file_uri(str(table_file)))
+            generator.create_tts_deck_json(
+                json_path=str(save_json_file),
+                sheets=sheets,
+                back_url=back_uri,
+                deck_title=deck_name,
+                table_url=table_uri,
+                sky_url=sky_uri,
+                is_saved_game=True
+            )
 
-        sky_file = assets_dir / "custom_sky.jpg"
-        if not sky_file.exists():
-            create_dark_anime_skybox(str(sky_file))
-            url_map.update(sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir))
-        sky_uri = url_map.get("custom_sky.jpg", to_file_uri(str(sky_file)))
+        for icon_name in (f"{clean_name}.png", "card_back.png", "deck_sheet_1.png"):
+            icon_path = tmp_dir / icon_name
+            if icon_path.exists():
+                shutil.copy2(icon_path, save_png_file)
+                break
 
-        generator.create_tts_deck_json(
-            json_path=str(save_json_file),
-            sheets=sheets,
-            back_url=back_uri,
-            deck_title=deck_name,
-            table_url=table_uri,
-            sky_url=sky_uri,
-            is_saved_game=True
-        )
-
-    for icon_name in (f"{clean_name}.png", "card_back.png", "deck_sheet_1.png"):
-        icon_path = assets_dir / icon_name
-        if icon_path.exists():
-            shutil.copy2(icon_path, save_png_file)
-            break
+    clean_save_file_infos(saves_dir)
 
     return {
         "success": True,
@@ -1170,87 +1485,89 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
             try:
                 deck_name = payload.get("deck_name", "Custom_Deck").strip() or "Custom_Deck"
-                clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
+                mods_images_dir = get_tts_mods_images_dir(saves_dir)
+                meta_dir = get_tts_meta_dir(saves_dir)
 
-                # Копируем изображения в папку Saves/Deck_Assets/<clean_name>
-                assets_dir = saves_dir / "Deck_Assets" / clean_name
-                assets_dir.mkdir(parents=True, exist_ok=True)
+                src_back = os.path.join(OUTPUT_DIR, "card_back.png")
+                src_table = os.path.join(OUTPUT_DIR, "tier_table.png")
+                src_sky = os.path.join(OUTPUT_DIR, "custom_sky.jpg")
+
+                if not os.path.exists(src_table):
+                    create_tier_table_image(src_table)
+                if not os.path.exists(src_sky):
+                    create_dark_anime_skybox(src_sky)
+
+                # Пытаемся взять точные метаданные листов из app_state или output/last_deck_result.json
+                saved_sheets_meta = None
+                if app_state.get("result") and app_state["result"].get("sheets"):
+                    saved_sheets_meta = app_state["result"]["sheets"]
+                else:
+                    last_res_path = os.path.join(OUTPUT_DIR, "last_deck_result.json")
+                    if os.path.exists(last_res_path):
+                        try:
+                            with open(last_res_path, "r", encoding="utf-8") as lf:
+                                saved_sheets_meta = json.load(lf).get("sheets")
+                        except Exception:
+                            pass
+
+                sheet_filenames = sorted(
+                    [f for f in os.listdir(OUTPUT_DIR) if f.startswith("deck_sheet_") and f.endswith(".png")],
+                    key=natural_sheet_sort_key
+                )
+                if not sheet_filenames:
+                    self._send_json({"success": False, "error": "Нет сгенерированных листов колоды"}, 400)
+                    return
+
+                file_map: dict[str, Path] = {}
+                sheet_paths = []
+                for fname in sheet_filenames:
+                    sp = Path(os.path.join(OUTPUT_DIR, fname))
+                    file_map[fname] = sp
+                    sheet_paths.append(sp)
+                if os.path.exists(src_back):
+                    file_map["card_back.png"] = Path(src_back)
+                if os.path.exists(src_table):
+                    file_map["tier_table.png"] = Path(src_table)
+                if os.path.exists(src_sky):
+                    file_map["custom_sky.jpg"] = Path(src_sky)
+
+                stable_id = get_deck_stable_id(deck_name, sheet_paths)
+                url_map = sync_files_to_mod_cache(file_map, stable_id, mods_images_dir)
 
                 sheets = []
-                for fname in sorted(os.listdir(OUTPUT_DIR)):
-                    if fname.startswith("deck_sheet_") and fname.endswith(".png"):
-                        src = os.path.join(OUTPUT_DIR, fname)
-                        dst = assets_dir / fname
-                        shutil.copy2(src, dst)
+                for i, fname in enumerate(sheet_filenames):
+                    src = str(file_map[fname])
+                    if saved_sheets_meta and i < len(saved_sheets_meta) and saved_sheets_meta[i].get("filename") == fname:
+                        cols = saved_sheets_meta[i]["width"]
+                        rows = saved_sheets_meta[i]["height"]
+                        ccount = saved_sheets_meta[i]["card_count"]
+                    else:
+                        geom = detect_sheet_geometry(src, src_back if os.path.exists(src_back) else None)
+                        cols = geom["width"]
+                        rows = geom["height"]
+                        ccount = geom["card_count"]
 
-                        with Image.open(src) as img:
-                            cols = 10
-                            rows = math.ceil(img.height / 420)
+                    sheets.append({
+                        "filename": fname,
+                        "path": src,
+                        "file_uri": url_map.get(fname, to_file_uri(src)),
+                        "width": cols,
+                        "height": rows,
+                        "card_count": ccount
+                    })
 
-                        sheets.append({
-                            "filename": fname,
-                            "path": str(dst),
-                            "file_uri": to_file_uri(str(dst)),
-                            "width": cols,
-                            "height": rows,
-                            "card_count": cols * rows
-                        })
+                back_uri = url_map.get("card_back.png", to_file_uri(src_back) if os.path.exists(src_back) else "")
+                table_uri = url_map.get("tier_table.png", to_file_uri(src_table))
+                sky_uri = url_map.get("custom_sky.jpg", to_file_uri(src_sky))
 
-                if app_state.get("result") and app_state["result"].get("sheets"):
-                    for i, orig_sheet in enumerate(app_state["result"]["sheets"]):
-                        if i < len(sheets):
-                            sheets[i]["card_count"] = orig_sheet["card_count"]
-                            sheets[i]["width"] = orig_sheet["width"]
-                            sheets[i]["height"] = orig_sheet["height"]
-
-                # Копируем рубашку
-                src_back = os.path.join(OUTPUT_DIR, "card_back.png")
-                dst_back = assets_dir / "card_back.png"
-                if os.path.exists(src_back):
-                    shutil.copy2(src_back, dst_back)
-                back_uri = to_file_uri(str(dst_back))
-
-                # Копируем текстуру стола Tier List
-                src_table = os.path.join(OUTPUT_DIR, "tier_table.png")
-                dst_table = assets_dir / "tier_table.png"
-                if os.path.exists(src_table):
-                    shutil.copy2(src_table, dst_table)
-                else:
-                    create_tier_table_image(str(dst_table))
-                table_uri = to_file_uri(str(dst_table))
-
-                # Копируем стилизованный тёмный фон (custom_sky.jpg)
-                src_sky = os.path.join(OUTPUT_DIR, "custom_sky.jpg")
-                dst_sky = assets_dir / "custom_sky.jpg"
-                if os.path.exists(src_sky):
-                    shutil.copy2(src_sky, dst_sky)
-                else:
-                    create_dark_anime_skybox(str(dst_sky))
-                sky_uri = to_file_uri(str(dst_sky))
-
-                sample_sheet = assets_dir / "deck_sheet_1.png"
-                stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
-                mods_images_dir = get_tts_mods_images_dir(saves_dir)
-                url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
-
-                with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
+                with open(meta_dir / f"{stable_id}.json", "w", encoding="utf-8") as mf:
                     json.dump({
                         "deck_id": stable_id,
                         "deck_title": deck_name,
                         "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
-                        "version": 2
+                        "version": 3
                     }, mf, ensure_ascii=False, indent=2)
 
-                for sheet in sheets:
-                    fname = sheet["filename"]
-                    if fname in url_map:
-                        sheet["file_uri"] = url_map[fname]
-
-                back_uri = url_map.get("card_back.png", back_uri)
-                table_uri = url_map.get("tier_table.png", table_uri)
-                sky_uri = url_map.get("custom_sky.jpg", sky_uri)
-
-                # Находим следующий свободный номер для TS_Save_X.json
                 existing_numbers = []
                 for f in os.listdir(saves_dir):
                     m = re.search(r"^TS_Save_(\d+)\.json$", f)
@@ -1261,7 +1578,6 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 save_json_file = saves_dir / f"TS_Save_{next_num}.json"
                 save_png_file = saves_dir / f"TS_Save_{next_num}.png"
 
-                # Создаём файл игры Tabletop Simulator со столом Tier List и тёмным фоном
                 generator.create_tts_deck_json(
                     json_path=str(save_json_file),
                     sheets=sheets,
@@ -1272,9 +1588,10 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                     is_saved_game=True
                 )
 
-                # Иконка сохранения
                 if os.path.exists(src_back):
                     shutil.copy2(src_back, save_png_file)
+
+                clean_save_file_infos(saves_dir)
 
                 self._send_json({
                     "success": True,
@@ -1302,62 +1619,74 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 deck_name = payload.get("deck_name", "Custom_Deck").strip() or "Custom_Deck"
                 clean_name = re.sub(r'[\\/*?:"<>| ]', '_', deck_name)
-
-                assets_dir = saved_objects_dir / "Deck_Assets" / clean_name
-                assets_dir.mkdir(parents=True, exist_ok=True)
-
-                sheets = []
-                for fname in sorted(os.listdir(OUTPUT_DIR)):
-                    if fname.startswith("deck_sheet_") and fname.endswith(".png"):
-                        src = os.path.join(OUTPUT_DIR, fname)
-                        dst = assets_dir / fname
-                        shutil.copy2(src, dst)
-
-                        with Image.open(src) as img:
-                            cols = 10
-                            rows = math.ceil(img.height / 420)
-
-                        sheets.append({
-                            "filename": fname,
-                            "path": str(dst),
-                            "file_uri": to_file_uri(str(dst)),
-                            "width": cols,
-                            "height": rows,
-                            "card_count": cols * rows
-                        })
-
-                if app_state.get("result") and app_state["result"].get("sheets"):
-                    for i, orig_sheet in enumerate(app_state["result"]["sheets"]):
-                        if i < len(sheets):
-                            sheets[i]["card_count"] = orig_sheet["card_count"]
-                            sheets[i]["width"] = orig_sheet["width"]
-                            sheets[i]["height"] = orig_sheet["height"]
+                mods_images_dir = get_tts_mods_images_dir(saves_dir)
+                meta_dir = get_tts_meta_dir(saves_dir)
 
                 src_back = os.path.join(OUTPUT_DIR, "card_back.png")
-                dst_back = assets_dir / "card_back.png"
+
+                saved_sheets_meta = None
+                if app_state.get("result") and app_state["result"].get("sheets"):
+                    saved_sheets_meta = app_state["result"]["sheets"]
+                else:
+                    last_res_path = os.path.join(OUTPUT_DIR, "last_deck_result.json")
+                    if os.path.exists(last_res_path):
+                        try:
+                            with open(last_res_path, "r", encoding="utf-8") as lf:
+                                saved_sheets_meta = json.load(lf).get("sheets")
+                        except Exception:
+                            pass
+
+                sheet_filenames = sorted(
+                    [f for f in os.listdir(OUTPUT_DIR) if f.startswith("deck_sheet_") and f.endswith(".png")],
+                    key=natural_sheet_sort_key
+                )
+                if not sheet_filenames:
+                    self._send_json({"success": False, "error": "Нет сгенерированных листов колоды"}, 400)
+                    return
+
+                file_map: dict[str, Path] = {}
+                sheet_paths = []
+                for fname in sheet_filenames:
+                    sp = Path(os.path.join(OUTPUT_DIR, fname))
+                    file_map[fname] = sp
+                    sheet_paths.append(sp)
                 if os.path.exists(src_back):
-                    shutil.copy2(src_back, dst_back)
-                back_uri = to_file_uri(str(dst_back))
+                    file_map["card_back.png"] = Path(src_back)
 
-                sample_sheet = assets_dir / "deck_sheet_1.png"
-                stable_id = get_deck_stable_id(deck_name, sample_sheet if sample_sheet.exists() else None)
-                mods_images_dir = get_tts_mods_images_dir(saved_objects_dir)
-                url_map = sync_deck_assets_to_mod_cache(assets_dir, stable_id, mods_images_dir)
+                stable_id = get_deck_stable_id(deck_name, sheet_paths)
+                url_map = sync_files_to_mod_cache(file_map, stable_id, mods_images_dir)
 
-                with open(assets_dir / "deck_meta.json", "w", encoding="utf-8") as mf:
+                sheets = []
+                for i, fname in enumerate(sheet_filenames):
+                    src = str(file_map[fname])
+                    if saved_sheets_meta and i < len(saved_sheets_meta) and saved_sheets_meta[i].get("filename") == fname:
+                        cols = saved_sheets_meta[i]["width"]
+                        rows = saved_sheets_meta[i]["height"]
+                        ccount = saved_sheets_meta[i]["card_count"]
+                    else:
+                        geom = detect_sheet_geometry(src, src_back if os.path.exists(src_back) else None)
+                        cols = geom["width"]
+                        rows = geom["height"]
+                        ccount = geom["card_count"]
+
+                    sheets.append({
+                        "filename": fname,
+                        "path": src,
+                        "file_uri": url_map.get(fname, to_file_uri(src)),
+                        "width": cols,
+                        "height": rows,
+                        "card_count": ccount
+                    })
+
+                back_uri = url_map.get("card_back.png", to_file_uri(src_back) if os.path.exists(src_back) else "")
+
+                with open(meta_dir / f"{stable_id}.json", "w", encoding="utf-8") as mf:
                     json.dump({
                         "deck_id": stable_id,
                         "deck_title": deck_name,
                         "base_url": f"http://tts-card-generator.local/decks/{stable_id}",
-                        "version": 2
+                        "version": 3
                     }, mf, ensure_ascii=False, indent=2)
-
-                for sheet in sheets:
-                    fname = sheet["filename"]
-                    if fname in url_map:
-                        sheet["file_uri"] = url_map[fname]
-
-                back_uri = url_map.get("card_back.png", back_uri)
 
                 obj_json_file = saved_objects_dir / f"{clean_name}.json"
                 obj_png_file = saved_objects_dir / f"{clean_name}.png"
@@ -1391,6 +1720,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
             deleted_games = 0
             deleted_objects = 0
+            urls_to_clean = []
 
             try:
                 # 1. Удаляем игры TS_Save_X, созданные генератором
@@ -1401,6 +1731,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                             with open(fpath, "r", encoding="utf-8") as jf:
                                 data = json.load(jf)
                             if is_generator_deck(data):
+                                urls_to_clean.extend(extract_all_urls_from_save(data))
                                 os.remove(fpath)
                                 png_path = saves_dir / fname.replace(".json", ".png")
                                 if png_path.exists():
@@ -1424,6 +1755,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                                 with open(fpath, "r", encoding="utf-8") as jf:
                                     data = json.load(jf)
                                 if is_generator_deck(data):
+                                    urls_to_clean.extend(extract_all_urls_from_save(data))
                                     os.remove(fpath)
                                     png_path = saved_objects_dir / fname.replace(".json", ".png")
                                     if png_path.exists():
@@ -1431,15 +1763,107 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                                     deleted_objects += 1
                             except Exception:
                                 pass
-                    # Очищаем папку ассетов Saved Objects/Deck_Assets
                     so_assets = saved_objects_dir / "Deck_Assets"
                     if so_assets.exists():
                         shutil.rmtree(so_assets, ignore_errors=True)
 
+                deleted_cache, freed_bytes = cleanup_unused_cache_files(urls_to_clean, saves_dir)
+
+                # Также удаляем любые осиротевшие httpttscardgenerator* файлы из Mods/Images и Images Raw
+                mods_img = get_tts_mods_images_dir(saves_dir)
+                mods_raw = get_tts_mods_raw_dir(saves_dir)
+                for folder in (mods_img, mods_raw):
+                    for item in folder.iterdir():
+                        if item.is_file() and "ttscardgenerator" in item.name.lower():
+                            try:
+                                freed_bytes += item.stat().st_size
+                                os.remove(item)
+                                deleted_cache += 1
+                            except Exception:
+                                pass
+
+                meta_dir = get_tts_meta_dir(saves_dir)
+                if meta_dir.exists():
+                    shutil.rmtree(meta_dir, ignore_errors=True)
+
+                clean_save_file_infos(saves_dir)
+
                 self._send_json({
                     "success": True,
                     "deleted_games": deleted_games,
-                    "deleted_objects": deleted_objects
+                    "deleted_objects": deleted_objects,
+                    "deleted_cache_files": deleted_cache,
+                    "freed_mb": round(freed_bytes / (1024 * 1024), 2)
+                })
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+            return
+
+        # --- ОЧИСТКА КЭША MODS/IMAGES И RAW TEXTURES TTS ---
+        if url_path == "/api/cleanup-tts-cache":
+            saves_dir = find_tts_saves_dir()
+            if not saves_dir:
+                self._send_json({"success": False, "error": "Папка Saves не найдена"}, 404)
+                return
+
+            clear_raw = bool(payload.get("clear_raw", False))
+            mods_img = get_tts_mods_images_dir(saves_dir)
+            mods_raw = get_tts_mods_raw_dir(saves_dir)
+            meta_dir = get_tts_meta_dir(saves_dir)
+
+            try:
+                used_urls = get_all_used_urls_in_tts(saves_dir)
+                used_cnames = {get_tts_cache_filename(u).lower() for u in used_urls if u.startswith(("http://", "https://"))}
+                used_stems = {os.path.splitext(c)[0] for c in used_cnames}
+                used_ids = set()
+                for u in used_urls:
+                    m = re.search(r"tts-card-generator\.local/decks/([^/]+)/", u)
+                    if m:
+                        used_ids.add(m.group(1))
+
+                removed_files = 0
+                freed_bytes = 0
+
+                # 1. Удаляем неиспользуемые файлы нашего генератора в Mods/Images
+                for item in mods_img.iterdir():
+                    if item.is_file() and "ttscardgenerator" in item.name.lower():
+                        if item.name.lower() not in used_cnames:
+                            try:
+                                freed_bytes += item.stat().st_size
+                                os.remove(item)
+                                removed_files += 1
+                            except Exception:
+                                pass
+
+                # 2. Удаляем неиспользуемые .rawt нашего генератора (или весь Images Raw если clear_raw=True)
+                for item in mods_raw.iterdir():
+                    if not item.is_file():
+                        continue
+                    stem = os.path.splitext(item.name)[0].lower()
+                    should_remove = clear_raw or ("ttscardgenerator" in item.name.lower() and stem not in used_stems)
+                    if should_remove:
+                        try:
+                            freed_bytes += item.stat().st_size
+                            os.remove(item)
+                            removed_files += 1
+                        except Exception:
+                            pass
+
+                # 3. Удаляем неиспользуемые мета-файлы
+                if meta_dir.exists():
+                    for item in meta_dir.iterdir():
+                        if item.is_file() and item.stem not in used_ids:
+                            try:
+                                os.remove(item)
+                            except Exception:
+                                pass
+
+                clean_save_file_infos(saves_dir)
+
+                self._send_json({
+                    "success": True,
+                    "removed_files": removed_files,
+                    "freed_mb": round(freed_bytes / (1024 * 1024), 2)
                 })
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)

@@ -112,43 +112,156 @@ def get_tts_mods_images_dir(saves_dir: Optional[Union[str, Path]] = None) -> Pat
     return mods_dir
 
 
-def get_deck_stable_id(deck_name: str, sample_sheet=None) -> str:
-    """Генерирует стабильный идентификатор колоды, не зависящий от переименования ZIP-файла на диске."""
-    clean_title = re.sub(r'[^a-zA-Z0-9_]', '', deck_name.replace(" ", "_")).strip("_") or "Deck"
-    h = ""
-    if sample_sheet:
-        if isinstance(sample_sheet, bytes):
-            h = hashlib.sha256(sample_sheet).hexdigest()[:10]
-        elif isinstance(sample_sheet, (str, Path)) and os.path.exists(sample_sheet):
+def get_tts_mods_raw_dir(saves_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Возвращает путь к папке сырого кэша Tabletop Simulator (Mods/Images Raw)."""
+    mods_img = get_tts_mods_images_dir(saves_dir)
+    raw_dir = mods_img.parent / "Images Raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    return raw_dir
+
+
+def get_tts_meta_dir(saves_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Возвращает путь к папке метаданных генератора вне Saves/ (чтобы TTS не сканировал их при запуске)."""
+    mods_img = get_tts_mods_images_dir(saves_dir)
+    meta_dir = mods_img.parent / "TTS_Card_Generator_Meta"
+    meta_dir.mkdir(parents=True, exist_ok=True)
+    return meta_dir
+
+
+def natural_sheet_sort_key(filename: str) -> tuple[int, str]:
+    """Естественная сортировка листов: deck_sheet_2 перед deck_sheet_10."""
+    m = re.search(r"deck_sheet_(\d+)", str(filename), re.IGNORECASE)
+    return (int(m.group(1)), str(filename)) if m else (999999, str(filename))
+
+
+def detect_sheet_geometry(sheet_path: Union[str, Path], card_back_path: Optional[Union[str, Path]] = None) -> dict:
+    """Точно определяет сетку (cols, rows), размер карты и реальное число карт на листе (исключая пустые чёрные слоты)."""
+    cols = 10
+    with Image.open(sheet_path) as img:
+        w, h = img.size
+        card_w = max(1, w // cols)
+        card_h = None
+
+        if card_back_path and os.path.exists(card_back_path):
             try:
-                with open(sample_sheet, "rb") as f:
-                    h = hashlib.sha256(f.read(65536)).hexdigest()[:10]
+                with Image.open(card_back_path) as bimg:
+                    bw, bh = bimg.size
+                    if bw == card_w and bh > 0:
+                        card_h = bh
             except Exception:
                 pass
-    if not h:
-        h = hashlib.sha256(deck_name.encode("utf-8")).hexdigest()[:10]
-    return f"{clean_title}_{h}"
+
+        if not card_h:
+            std_h = max(1, int(round(card_w * 1.4)))
+            if h % std_h == 0:
+                card_h = std_h
+            else:
+                for cand in (420, 560, 700, std_h):
+                    if h % cand == 0:
+                        card_h = cand
+                        break
+                if not card_h:
+                    card_h = std_h
+
+        rows = max(1, math.ceil(h / card_h))
+        card_count = cols * rows
+
+        # Отбрасываем пустые чёрные слоты (0, 0, 0) в конце последнего листа
+        try:
+            arr = np.asarray(img.convert("RGB"))
+            found_last = 0
+            for idx in range(cols * rows - 1, -1, -1):
+                r = idx // cols
+                c = idx % cols
+                y0 = r * card_h
+                y1 = min(h, (r + 1) * card_h)
+                x0 = c * card_w
+                x1 = min(w, (c + 1) * card_w)
+                if y1 > y0 and x1 > x0:
+                    cell = arr[y0:y1, x0:x1]
+                    if cell.max() > 0:
+                        found_last = idx + 1
+                        break
+            if found_last > 0:
+                card_count = found_last
+        except Exception:
+            pass
+
+    return {
+        "width": cols,
+        "height": rows,
+        "card_width": card_w,
+        "card_height": card_h,
+        "card_count": card_count
+    }
 
 
-def sync_deck_assets_to_mod_cache(assets_dir: Path, stable_id: str, mods_images_dir: Path) -> dict:
-    """Копирует ассеты колоды в кэш Tabletop Simulator (Mods/Images) с виртуальными URL для мультиплеера."""
+def get_deck_stable_id(deck_name: str, sample_sheets=None) -> str:
+    """Генерирует стабильный ID колоды исключительно на основе контента (дедупликация + совместимость при переименовании ZIP)."""
+    hasher = hashlib.sha256()
+    used_content = False
+
+    if isinstance(sample_sheets, (list, tuple)):
+        sheet_paths = sorted([p for p in sample_sheets if p and os.path.exists(p)], key=lambda p: natural_sheet_sort_key(os.path.basename(str(p))))
+        if sheet_paths:
+            hasher.update(str(len(sheet_paths)).encode("utf-8"))
+            for sp in sheet_paths:
+                try:
+                    sz = os.path.getsize(sp)
+                    hasher.update(f"|{sz}|".encode("utf-8"))
+                    with open(sp, "rb") as f:
+                        hasher.update(f.read(65536))
+                    used_content = True
+                except Exception:
+                    pass
+    elif isinstance(sample_sheets, bytes):
+        hasher.update(sample_sheets)
+        used_content = True
+    elif isinstance(sample_sheets, (str, Path)) and os.path.exists(sample_sheets):
+        try:
+            with open(sample_sheets, "rb") as f:
+                hasher.update(f.read(65536))
+            used_content = True
+        except Exception:
+            pass
+
+    if not used_content:
+        hasher.update(deck_name.encode("utf-8"))
+
+    return f"deck_{hasher.hexdigest()[:12]}"
+
+
+def sync_files_to_mod_cache(file_map: dict[str, Path], stable_id: str, mods_images_dir: Path) -> dict:
+    """Копирует словарь {имя_файла: локальный_путь} в кэш TTS (Mods/Images) с виртуальными URL."""
     base_url = f"http://tts-card-generator.local/decks/{stable_id}"
     url_map = {}
-    if not assets_dir.exists():
-        return url_map
-    for f in os.listdir(assets_dir):
-        if f.lower().endswith((".png", ".jpg", ".jpeg")):
-            fpath = assets_dir / f
-            vurl = f"{base_url}/{f}"
+    for fname, fpath in file_map.items():
+        if not fpath or not Path(fpath).exists():
+            continue
+        if fname.lower().endswith((".png", ".jpg", ".jpeg")):
+            vurl = f"{base_url}/{fname}"
             cname = get_tts_cache_filename(vurl)
             target = mods_images_dir / cname
             try:
-                if not target.exists() or target.stat().st_size != fpath.stat().st_size:
-                    shutil.copy2(fpath, target)
+                src_p = Path(fpath)
+                if not target.exists() or target.stat().st_size != src_p.stat().st_size:
+                    shutil.copy2(src_p, target)
             except Exception as e:
-                print(f"[WARN] Failed to cache {f}: {e}")
-            url_map[f] = vurl
+                print(f"[WARN] Failed to cache {fname}: {e}")
+            url_map[fname] = vurl
     return url_map
+
+
+def sync_deck_assets_to_mod_cache(assets_dir: Path, stable_id: str, mods_images_dir: Path) -> dict:
+    """Копирует ассеты колоды из папки в кэш Tabletop Simulator (Mods/Images) с виртуальными URL для мультиплеера."""
+    if not assets_dir.exists():
+        return {}
+    file_map = {
+        f: assets_dir / f
+        for f in os.listdir(assets_dir)
+        if f.lower().endswith((".png", ".jpg", ".jpeg")) and (assets_dir / f).is_file()
+    }
+    return sync_files_to_mod_cache(file_map, stable_id, mods_images_dir)
 
 
 def create_tier_table_image(output_path: str):

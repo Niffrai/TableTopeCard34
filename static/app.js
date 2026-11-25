@@ -997,6 +997,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const installedEmpty = document.getElementById("installed-empty");
   const btnRefreshDecks = document.getElementById("btn-refresh-decks");
   const btnOpenTtsDir = document.getElementById("btn-open-tts-dir");
+  const btnCleanupTtsCache = document.getElementById("btn-cleanup-tts-cache");
   const btnDeleteAllDecks = document.getElementById("btn-delete-all-decks");
   const searchInput = document.getElementById("installed-search");
   const typeFilterSelect = document.getElementById("installed-type-filter");
@@ -1294,6 +1295,35 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  if (btnCleanupTtsCache) {
+    btnCleanupTtsCache.addEventListener("click", async () => {
+      if (!confirm("Очистить неиспользуемый кэш колод (Mods/Images) и тяжёлые временные текстуры TTS (Images Raw)?\n\nЭто освободит место на диске и ускорит запуск Tabletop Simulator. Ваши колоды и сохранения останутся нетронутыми.")) {
+        return;
+      }
+      btnCleanupTtsCache.disabled = true;
+      btnCleanupTtsCache.textContent = "Очистка кэша...";
+      try {
+        const res = await fetch("/api/cleanup-tts-cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ clear_raw: true })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Кэш очищен! Удалено файлов: ${data.removed_files}, освобождено: ${data.freed_mb} МБ`, "success", "Кэш TTS");
+          loadInstalledDecks();
+        } else {
+          showToast("Ошибка очистки кэша: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка кэша");
+        }
+      } catch (e) {
+        showToast("Ошибка сети: " + e.message, "error", "Сбой сети");
+      } finally {
+        btnCleanupTtsCache.disabled = false;
+        btnCleanupTtsCache.textContent = "🧹 Очистить кэш TTS";
+      }
+    });
+  }
+
   if (btnDeleteAllDecks) {
     btnDeleteAllDecks.addEventListener("click", async () => {
       if (!confirm("Вы действительно хотите удалить все созданные генератором колоды из Tabletop Simulator? (Ваши личные сохранения затронуты не будут).")) {
@@ -1306,7 +1336,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         if (data.success) {
           selectedDeckIds.clear();
-          showToast(`Очистка завершена! Удалено игр: ${data.deleted_games}, объектов: ${data.deleted_objects}`, "success", "Очистка TTS");
+          const cacheInfo = data.freed_mb ? ` (освобождено ${data.freed_mb} МБ кэша)` : "";
+          showToast(`Очистка завершена! Удалено игр: ${data.deleted_games}, объектов: ${data.deleted_objects}${cacheInfo}`, "success", "Очистка TTS");
           loadInstalledDecks();
         } else {
           showToast("Ошибка: " + data.error, "error", "Ошибка очистки");
