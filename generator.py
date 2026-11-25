@@ -462,17 +462,17 @@ def is_shock_content_tag(tag: str) -> bool:
         return True
     if t.startswith("blood_") or t.endswith("_blood"):
         return True
-    # 4. Копро, рвота, экскременты, золотой дождь
-    if t in ("scat", "feces", "poop", "defecation", "coprophagia", "watersports", "urination", "enema", "soiled", "diaper"):
+    # 4. Копро, рвота, экскременты, золотой дождь, моча
+    if t in ("scat", "feces", "poop", "defecation", "coprophagia", "watersports", "urination", "enema", "soiled", "diaper", "piss", "pissing", "pee", "peeing", "golden_shower"):
         return True
     if t.startswith("scat_") or t.endswith("_scat") or "_scat_" in t:
         return True
-    if any(sub in t for sub in ("vomit", "fecal", "defecat", "coprophag", "watersport")):
+    if any(sub in t for sub in ("vomit", "fecal", "defecat", "coprophag", "watersport", "piss", "urina")):
         return True
-    # 5. Зоофилия и животные
-    if any(sub in t for sub in ("bestialit", "zoophil")):
+    # 5. Зоофилия и животные (не антро)
+    if any(sub in t for sub in ("bestialit", "zoophil", "feral")):
         return True
-    if t in ("bestiality", "zoophilia"):
+    if t in ("bestiality", "zoophilia", "feral"):
         return True
     # 6. Отвратительные персонажи и паразиты
     if any(sub in t for sub in ("ugly_bastard", "parasite", "maggots")):
@@ -496,11 +496,90 @@ def is_weird_fetish_tag(tag: str) -> bool:
         "implausible_proportions", "extreme_proportions", "gigantic_breasts",
         "gigantic_ass", "body_expansion", "belly_expansion", "stomach_deformation",
         "morbidly_obese", "inflation", "oviposition", "weight_gain", "extreme_muscles",
-        "hyper_pregnancy"
+        "hyper_pregnancy", "flatulen", "fart", "burp"
     )):
         return True
     if t in ("giantess", "macro", "expansion", "hypertrophy"):
         return True
+
+    return False
+
+
+NEGATIVE_SYNONYM_FAMILIES = {
+    "futa": {
+        "futa", "futanari", "1futa", "2futas", "dickgirl", "gynomorph", "intersex", "shemale",
+        "futa_with_female", "futa_on_female", "futa_penetrating", "futa_only", "implied_futa",
+        "futa/female", "futa_dom"
+    },
+    "penis": {
+        "penis", "cock", "dick", "phallus", "erection", "erect_penis", "knot", "knotting",
+        "huge_penis", "big_penis", "veiny_penis", "small_penis", "canine_penis", "humanoid_penis",
+        "huge_cock", "big_cock", "huge_dick", "glans", "penis_in_ass", "penis_in_pussy"
+    },
+    "3d": {
+        "3d", "3d_(artwork)", "3d_art", "3d_model", "3d_render", "blender", "blender_(software)",
+        "koikatsu", "sfm", "source_filmmaker", "render", "cgi", "daz", "daz3d", "mmd", "mikumikudance"
+    },
+    "comic": {
+        "comic", "manga", "doujinshi", "webcomic", "comic_strip", "4koma", "panels", "comic_panel", "monochrome_comic"
+    },
+    "text": {
+        "text", "english_text", "japanese_text", "chinese_text", "korean_text", "speech_bubble",
+        "dialogue", "translated", "subtitles", "watermark", "caption", "text_focus"
+    },
+    "bad_anatomy": {
+        "bad_anatomy", "bad_hands", "bad_feet", "bad_proportions", "deformed", "anatomical_nonsense"
+    },
+    "lowres": {
+        "lowres", "low_res", "bad_quality", "worst_quality"
+    }
+}
+
+
+def expand_negative_tags(raw_negatives: list[str]) -> set[str]:
+    """Расширяет список отрицательных тегов синонимами и семейными тегами booru."""
+    expanded = set()
+    for neg in raw_negatives:
+        n = neg.lstrip("-").strip().lower().replace(" ", "_")
+        if not n:
+            continue
+        expanded.add(n)
+        for key, synonyms in NEGATIVE_SYNONYM_FAMILIES.items():
+            if n == key or n in synonyms:
+                expanded.update(synonyms)
+    expanded.update(["video", "animated", "webm", "mp4"])
+    return expanded
+
+
+def is_post_blocked_by_negatives(post_tags: set[str], raw_negatives: list[str], expanded_negatives: set[str]) -> bool:
+    """
+    Тщательно проверяет пост на наличие запрещенных тегов:
+    1) Быстрое пересечение с расширенной базой синонимов.
+    2) Проверка составных слов с дефисами/подчеркиваниями (huge_penis, futanari_on_female, english_text).
+    """
+    if post_tags.intersection(expanded_negatives):
+        return True
+
+    cleaned_user_negatives = [neg.lstrip("-").strip().lower().replace(" ", "_") for neg in raw_negatives if neg.strip()]
+
+    for pt in post_tags:
+        for n in cleaned_user_negatives:
+            if not n:
+                continue
+            if pt == n:
+                return True
+            if pt.startswith(n + "_") or pt.endswith("_" + n) or ("_" + n + "_") in pt:
+                return True
+            if n == "futa" and "futa" in pt:
+                return True
+            if n == "3d" and pt.startswith("3d"):
+                return True
+            if n == "text" and ("text" in pt or pt.endswith("_text")):
+                return True
+            if n == "comic" and "comic" in pt:
+                return True
+            if n == "penis" and ("penis" in pt or "cock" in pt or "dick" in pt or "phallus" in pt):
+                return True
 
     return False
 
@@ -795,6 +874,23 @@ class DeckGenerator:
             if len(api_query_tags) < max_api_tags and "-video" not in api_query_tags:
                 api_query_tags.append("-video")
 
+        # Добавляем ключевые отрицательные теги в поисковый запрос API, если есть свободные слоты
+        primary_neg_map = {
+            "futa": "futanari",
+            "penis": "penis",
+            "comic": "comic",
+            "3d": "3d",
+            "text": "text"
+        }
+        for neg in negative_tags:
+            if len(api_query_tags) >= max_api_tags:
+                break
+            n = neg.lstrip("-").strip().lower().replace(" ", "_")
+            tag_to_negate = primary_neg_map.get(n, n)
+            neg_query_tag = f"-{tag_to_negate}"
+            if neg_query_tag not in api_query_tags and tag_to_negate not in api_query_tags:
+                api_query_tags.append(neg_query_tag)
+
         tags_query_str = " ".join(api_query_tags)
         if character and artist:
             char_label = f"{character} ({artist})"
@@ -807,12 +903,7 @@ class DeckGenerator:
 
         log_callback(f"Поиск для '{char_label}' в {source_info['name']} (запрос: '{tags_query_str}')...")
 
-        cleaned_negatives = set()
-        for neg in negative_tags:
-            neg_clean = neg.lstrip("-").strip().lower().replace(" ", "_")
-            if neg_clean:
-                cleaned_negatives.add(neg_clean)
-        cleaned_negatives.update(["video", "animated", "webm", "mp4"])
+        expanded_negatives = expand_negative_tags(negative_tags)
 
         cleaned_negative_artists = set()
         if negative_artists:
@@ -943,7 +1034,7 @@ class DeckGenerator:
 
                 # 3. Фильтрация по отрицательным тегам, художникам и активным щитам защиты
                 post_tags = set(post.get("tags", "").lower().split())
-                if post_tags.intersection(cleaned_negatives):
+                if is_post_blocked_by_negatives(post_tags, negative_tags, expanded_negatives):
                     continue
                 if cleaned_negative_artists and post_tags.intersection(cleaned_negative_artists):
                     continue
