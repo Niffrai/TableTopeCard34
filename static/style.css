@@ -1702,6 +1702,90 @@ input[type="range"]::-webkit-slider-thumb:hover {
   color: var(--accent-primary, #3b82f6);
 }
 
+/* Toast with live progress bar */
+.toast-progress {
+  min-width: 330px;
+}
+
+.toast-progress-track {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+  margin-bottom: 6px;
+  position: relative;
+}
+
+.toast-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  border-radius: 4px;
+  transition: width 0.18s ease;
+}
+
+.toast.toast-success .toast-progress-fill {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.toast.toast-error .toast-progress-fill {
+  background: linear-gradient(90deg, #ef4444, #f87171);
+}
+
+@keyframes toastIndeterminate {
+  0% {
+    transform: translateX(-100%);
+    width: 45%;
+  }
+  50% {
+    transform: translateX(60%);
+    width: 65%;
+  }
+  100% {
+    transform: translateX(230%);
+    width: 45%;
+  }
+}
+
+.toast-progress-fill.indeterminate {
+  width: 50% !important;
+  animation: toastIndeterminate 1.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toast-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-dim, #71717a);
+  font-variant-numeric: tabular-nums;
+}
+
+.toast-progress-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.toast-progress-numbers {
+  font-weight: 600;
+  color: var(--text-main, #e4e4e7);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+@keyframes toastSpin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-spin {
+  animation: toastSpin 1s linear infinite;
+}
+
 /* ==========================================================================
    Modals & Tooltips
    ========================================================================== */
@@ -2350,5 +2434,32 @@ body.theme-frutiger-aero .error-info h3 {
 
 body.theme-frutiger-aero .error-info p {
   color: #7f1d1d;
+}
+
+body.theme-frutiger-aero .toast-progress-track {
+  background: rgba(0, 45, 95, 0.12);
+  border: 1px solid rgba(0, 45, 95, 0.18);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+body.theme-frutiger-aero .toast-progress-fill {
+  background: linear-gradient(180deg, #60c5ff 0%, #0284c7 50%, #0369a1 100%);
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4), inset 0 1px 1px #fff;
+}
+
+body.theme-frutiger-aero .toast.toast-success .toast-progress-fill {
+  background: linear-gradient(180deg, #86efac 0%, #22c55e 50%, #15803d 100%);
+}
+
+body.theme-frutiger-aero .toast.toast-error .toast-progress-fill {
+  background: linear-gradient(180deg, #fca5a5 0%, #ef4444 50%, #b91c1c 100%);
+}
+
+body.theme-frutiger-aero .toast-progress-meta {
+  color: #1a517a;
+}
+
+body.theme-frutiger-aero .toast-progress-numbers {
+  color: #032b49;
 }
 

@@ -61,6 +61,193 @@ function showToast(message, type = "info", title = "", duration = 5000) {
   }
 }
 
+// --- СКАЧИВАНИЕ ZIP-АРХИВОВ С ИНДИКАТОРОМ ПРОГРЕССА ---
+function formatBytes(bytes) {
+  if (!bytes || bytes <= 0) return "0 Б";
+  const units = ["Б", "КБ", "МБ", "ГБ"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(1) + " " + units[i];
+}
+
+function extractFilenameFromHeader(disposition, fallback = "deck.zip") {
+  if (!disposition) return fallback;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch (_) {}
+  }
+  const quotedMatch = disposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch && quotedMatch[1]) {
+    return quotedMatch[1].trim();
+  }
+  const plainMatch = disposition.match(/filename=([^;]+)/i);
+  if (plainMatch && plainMatch[1]) {
+    return plainMatch[1].trim();
+  }
+  return fallback;
+}
+
+async function downloadZipWithProgress(url, {
+  method = "GET",
+  body = null,
+  headers = {},
+  defaultFilename = "deck.zip",
+  title = "Сохранение ZIP-архива"
+} = {}) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = "toast toast-progress toast-info";
+
+  const abortController = new AbortController();
+
+  toast.innerHTML = `
+    <div class="toast-icon-wrapper">
+      <svg class="toast-icon toast-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+      </svg>
+    </div>
+    <div class="toast-body">
+      <div class="toast-title">${escapeHtml(title)}</div>
+      <div class="toast-message">Сервер сжимает карты и текстуры...</div>
+      <div class="toast-progress-track">
+        <div class="toast-progress-fill indeterminate"></div>
+      </div>
+      <div class="toast-progress-meta">
+        <span class="toast-progress-status">Подготовка архива...</span>
+        <span class="toast-progress-numbers">0%</span>
+      </div>
+    </div>
+    <button type="button" class="toast-close" title="Отмена">&times;</button>
+  `;
+
+  let isClosed = false;
+  function closeToast() {
+    if (isClosed) return;
+    isClosed = true;
+    toast.classList.add("toast-hiding");
+    setTimeout(() => {
+      if (toast.parentElement) toast.parentElement.removeChild(toast);
+    }, 250);
+  }
+
+  const closeBtn = toast.querySelector(".toast-close");
+  closeBtn.addEventListener("click", () => {
+    abortController.abort();
+    closeToast();
+  });
+
+  container.appendChild(toast);
+
+  const messageEl = toast.querySelector(".toast-message");
+  const progressFill = toast.querySelector(".toast-progress-fill");
+  const progressStatus = toast.querySelector(".toast-progress-status");
+  const progressNumbers = toast.querySelector(".toast-progress-numbers");
+  const iconWrapper = toast.querySelector(".toast-icon-wrapper");
+  const titleEl = toast.querySelector(".toast-title");
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers,
+      body,
+      signal: abortController.signal
+    });
+
+    if (!res.ok) {
+      let errMsg = "Ошибка при загрузке архива";
+      try {
+        const errJson = await res.json();
+        if (errJson.error) errMsg = errJson.error;
+      } catch (_) {
+        errMsg = `Сбой сервера (${res.status} ${res.statusText})`;
+      }
+      throw new Error(errMsg);
+    }
+
+    const disposition = res.headers.get("Content-Disposition");
+    const filename = extractFilenameFromHeader(disposition, defaultFilename);
+    const contentLength = parseInt(res.headers.get("Content-Length") || "0", 10);
+
+    const cleanName = filename.replace(/\.zip$/i, "");
+    titleEl.textContent = `📦 Экспорт «${cleanName}»`;
+    progressFill.classList.remove("indeterminate");
+    progressFill.style.width = "0%";
+    messageEl.textContent = `Скачивание: ${filename}`;
+    progressStatus.textContent = contentLength > 0 ? `0 из ${formatBytes(contentLength)}` : "Скачивание...";
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+
+      if (contentLength > 0) {
+        const pct = Math.min(100, Math.round((received / contentLength) * 100));
+        progressFill.style.width = `${pct}%`;
+        progressNumbers.textContent = `${pct}%`;
+        progressStatus.textContent = `${formatBytes(received)} / ${formatBytes(contentLength)}`;
+      } else {
+        progressFill.style.width = "100%";
+        progressNumbers.textContent = "";
+        progressStatus.textContent = formatBytes(received);
+      }
+    }
+
+    const blob = new Blob(chunks, { type: "application/zip" });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 500);
+
+    toast.className = "toast toast-progress toast-success";
+    iconWrapper.innerHTML = `
+      <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+      </svg>
+    `;
+    titleEl.textContent = "Архив успешно сохранён!";
+    messageEl.textContent = `Файл «${filename}» (${formatBytes(received)}) скачан на компьютер.`;
+    progressFill.style.width = "100%";
+    progressStatus.textContent = "100% Завершено";
+    progressNumbers.textContent = "";
+
+    setTimeout(closeToast, 4500);
+  } catch (err) {
+    if (err.name === "AbortError") {
+      messageEl.textContent = "Загрузка отменена пользователем.";
+      setTimeout(closeToast, 1500);
+      return;
+    }
+    toast.className = "toast toast-progress toast-error";
+    iconWrapper.innerHTML = `
+      <svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="15" y1="9" x2="9" y2="15"></line>
+        <line x1="9" y1="9" x2="15" y2="15"></line>
+      </svg>
+    `;
+    titleEl.textContent = "Ошибка экспорта ZIP";
+    messageEl.textContent = err.message || "Не удалось сохранить архив";
+    progressFill.style.width = "100%";
+    progressStatus.textContent = "Сбой";
+    progressNumbers.textContent = "";
+  }
+}
+
 // --- ГЛОБАЛЬНЫЕ ОБРАБОТЧИКИ СОБЫТИЙ НА ОШИБКИ (ERROR EVENT HANDLERS) ---
 window.addEventListener("error", (event) => {
   console.error("Глобальный перехват ошибки (Window Error):", event.error || event.message);
@@ -967,7 +1154,10 @@ document.addEventListener("DOMContentLoaded", () => {
       // Кнопка экспорта отдельной колоды в .zip для друга
       const expBtn = card.querySelector(".deck-export-btn");
       expBtn.addEventListener("click", () => {
-        window.location.href = `/api/export-tts-deck?type=${encodeURIComponent(deck.type)}&filename=${encodeURIComponent(deck.filename)}`;
+        downloadZipWithProgress(`/api/export-tts-deck?type=${encodeURIComponent(deck.type)}&filename=${encodeURIComponent(deck.filename)}`, {
+          title: `📦 Экспорт «${deck.name}»`,
+          defaultFilename: `${deck.name}.zip`
+        });
       });
 
       // Кнопка удаления отдельной колоды
@@ -1065,11 +1255,14 @@ document.addEventListener("DOMContentLoaded", () => {
       if (selectedDeckIds.size === 0) return;
       const decksToExport = allInstalledDecks
         .filter(d => selectedDeckIds.has(d.id))
-        .map(d => ({ type: d.type, filename: d.filename }));
+        .map(d => ({ type: d.type, filename: d.filename, name: d.name }));
 
       if (decksToExport.length === 1) {
         const d = decksToExport[0];
-        window.location.href = `/api/export-tts-deck?type=${encodeURIComponent(d.type)}&filename=${encodeURIComponent(d.filename)}`;
+        downloadZipWithProgress(`/api/export-tts-deck?type=${encodeURIComponent(d.type)}&filename=${encodeURIComponent(d.filename)}`, {
+          title: `📦 Экспорт «${d.name || d.filename}»`,
+          defaultFilename: `${d.name || "deck"}.zip`
+        });
         return;
       }
 
@@ -1077,36 +1270,13 @@ document.addEventListener("DOMContentLoaded", () => {
       btnExportSelected.textContent = "Сборка архива...";
 
       try {
-        const res = await fetch("/api/export-selected-tts-decks", {
+        await downloadZipWithProgress("/api/export-selected-tts-decks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decks: decksToExport })
+          body: JSON.stringify({ decks: decksToExport.map(d => ({ type: d.type, filename: d.filename })) }),
+          title: `📦 Экспорт выбранных колод (${decksToExport.length} шт.)`,
+          defaultFilename: "TTS_Decks_Collection.zip"
         });
-        const data = await res.json();
-        if (data.success && data.data) {
-          const byteCharacters = atob(data.data);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-            byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: "application/zip" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = data.filename || "TTS_Decks_Collection.zip";
-          document.body.appendChild(a);
-          a.click();
-          setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          }, 200);
-          showToast("Архив с выбранными колодами успешно сформирован!", "success");
-        } else {
-          showToast("Ошибка экспорта: " + (data.error || "Неизвестная ошибка"), "error", "Ошибка экспорта");
-        }
-      } catch (err) {
-        showToast("Ошибка сети при экспорте: " + err.message, "error", "Сбой сети");
       } finally {
         btnExportSelected.disabled = false;
         btnExportSelected.textContent = "📦 Экспорт выбранных";
@@ -1267,6 +1437,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function showResults(result, shouldScroll = true) {
+    if (result && result.deck_title && deckTitleInput) {
+      deckTitleInput.value = result.deck_title;
+    }
     let summary = `Успешно создано ${result.total_cards} уникальных карт. Собрано листов: ${result.sheets.length}.`;
     if (result.duplicates_filtered) {
       summary += ` Отсеяно повторов: ${result.duplicates_filtered}.`;
@@ -1323,6 +1496,9 @@ document.addEventListener("DOMContentLoaded", () => {
         startPolling();
       } else if (state.result && state.result.success) {
         // Восстанавливаем результат готовой генерации
+        if (state.result.deck_title && deckTitleInput) {
+          deckTitleInput.value = state.result.deck_title;
+        }
         progressBar.style.width = "100%";
         percentText.textContent = "100%";
         statusText.textContent = state.status_message || "Генерация завершена";
@@ -1358,7 +1534,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- ЭКСПОРТ ДЛЯ ДРУГА (.ZIP) ---
   if (btnExportZip) {
     btnExportZip.addEventListener("click", () => {
-      window.location.href = "/api/export-zip";
+      const deckTitle = (deckTitleInput && deckTitleInput.value.trim()) || "Custom_Deck";
+      downloadZipWithProgress("/api/export-zip", {
+        title: `📦 Экспорт колоды «${deckTitle}»`,
+        defaultFilename: `${deckTitle}.zip`
+      });
     });
   }
 

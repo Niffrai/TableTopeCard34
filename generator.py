@@ -1271,6 +1271,7 @@ class DeckGenerator:
 
         return {
             "success": True,
+            "deck_title": deck_title,
             "total_cards": total_cards_count,
             "sheets": generated_sheets,
             "card_back": {

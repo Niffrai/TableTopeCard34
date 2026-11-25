@@ -81,6 +81,15 @@ def load_cached_last_result():
                     for s in sheets
                 )
                 if all_exist:
+                    if not saved.get("deck_title"):
+                        saved_deck_json = os.path.join(OUTPUT_DIR, "tts_saved_deck.json")
+                        if os.path.exists(saved_deck_json):
+                            try:
+                                with open(saved_deck_json, "r", encoding="utf-8") as f:
+                                    sdata = json.load(f)
+                                    saved["deck_title"] = sdata.get("SaveName") or (sdata.get("ObjectStates") and sdata["ObjectStates"][0].get("Nickname"))
+                            except Exception:
+                                pass
                     app_state["result"] = saved
                     app_state["percent"] = 100
                     app_state["status_message"] = "Предыдущая колода готова"
@@ -191,6 +200,8 @@ def generation_worker(params: dict):
         )
 
         if res.get("success"):
+            if not res.get("deck_title"):
+                res["deck_title"] = deck_title
             app_state["result"] = res
             app_state["status_message"] = "Генерация успешно завершена!"
             append_log(f"Успешно создано карт: {res.get('total_cards')}. Листов: {len(res.get('sheets', []))}")
@@ -490,11 +501,17 @@ def export_single_tts_deck(deck_type: str, filename: str) -> tuple[io.BytesIO | 
     if not save_name:
         save_name = clean_file.replace(".json", "")
 
-    clean_name = re.sub(r'[\\/*?:"<>| ]', '_', save_name).strip() or "Custom_Deck"
+    clean_name = re.sub(r'[\\/*?:"<>|\r\n\t]', '_', save_name).strip() or "Custom_Deck"
 
     specific_assets = assets_base / clean_name
     if not specific_assets.exists():
-        specific_assets = saves_dir / "Deck_Assets" / clean_name
+        clean_name_underscores = clean_name.replace(" ", "_")
+        if (assets_base / clean_name_underscores).exists():
+            specific_assets = assets_base / clean_name_underscores
+        elif (saves_dir / "Deck_Assets" / clean_name).exists():
+            specific_assets = saves_dir / "Deck_Assets" / clean_name
+        elif (saves_dir / "Deck_Assets" / clean_name_underscores).exists():
+            specific_assets = saves_dir / "Deck_Assets" / clean_name_underscores
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -695,13 +712,21 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             zip_bytes = buf.getvalue()
-            filename_enc = urllib.parse.quote(f"{clean_name}_TTS_Package.zip")
+            clean_name = re.sub(r'[\\/*?:"<>|\r\n\t]', '_', clean_name).strip() or "Custom_Deck"
+            zip_filename = f"{clean_name}.zip"
+            filename_enc = urllib.parse.quote(zip_filename, encoding="utf-8")
+            ascii_fallback = re.sub(r'[^\x20-\x7E]', '_', zip_filename).replace('"', '')
+            if not ascii_fallback.endswith(".zip"):
+                ascii_fallback = "deck.zip"
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{filename_enc}")
+            self.send_header("Content-Disposition", f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{filename_enc}')
             self.send_header("Content-Length", str(len(zip_bytes)))
+            self.send_header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length")
             self.end_headers()
-            self.wfile.write(zip_bytes)
+            CHUNK_SIZE = 128 * 1024
+            for i in range(0, len(zip_bytes), CHUNK_SIZE):
+                self.wfile.write(zip_bytes[i:i + CHUNK_SIZE])
             return
 
         if url_path == "/api/tts-thumb":
@@ -736,10 +761,29 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             if not os.path.exists(sky_path):
                 create_dark_anime_skybox(sky_path)
 
-            deck_title = "Custom_Deck"
+            deck_title = None
             if app_state.get("result") and app_state["result"].get("deck_title"):
                 deck_title = app_state["result"]["deck_title"]
-            clean_title = re.sub(r'[\\/*?:"<>| ]', '_', deck_title)
+            if not deck_title:
+                saved_deck_json = os.path.join(OUTPUT_DIR, "tts_saved_deck.json")
+                if os.path.exists(saved_deck_json):
+                    try:
+                        with open(saved_deck_json, "r", encoding="utf-8") as f:
+                            sdata = json.load(f)
+                            deck_title = sdata.get("SaveName")
+                            if not deck_title and sdata.get("ObjectStates"):
+                                deck_title = sdata["ObjectStates"][0].get("Nickname")
+                    except Exception:
+                        pass
+            if not deck_title:
+                deck_title = "Custom_Deck"
+
+            clean_title = re.sub(r'[\\/*?:"<>|\r\n\t]', '_', deck_title).strip() or "Custom_Deck"
+            zip_filename = f"{clean_title}.zip"
+            filename_enc = urllib.parse.quote(zip_filename, encoding="utf-8")
+            ascii_fallback = re.sub(r'[^\x20-\x7E]', '_', zip_filename).replace('"', '')
+            if not ascii_fallback.endswith(".zip"):
+                ascii_fallback = "deck.zip"
 
             buf = io.BytesIO()
             with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -791,10 +835,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             zip_bytes = buf.getvalue()
             self.send_response(200)
             self.send_header("Content-Type", "application/zip")
-            self.send_header("Content-Disposition", f'attachment; filename="{clean_title}_TTS_Package.zip"')
+            self.send_header("Content-Disposition", f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{filename_enc}')
             self.send_header("Content-Length", str(len(zip_bytes)))
+            self.send_header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length")
             self.end_headers()
-            self.wfile.write(zip_bytes)
+            CHUNK_SIZE = 128 * 1024
+            for i in range(0, len(zip_bytes), CHUNK_SIZE):
+                self.wfile.write(zip_bytes[i:i + CHUNK_SIZE])
             return
 
         self.send_error(404, "Not Found")
@@ -1249,13 +1296,9 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 if err or not buf:
                     self._send_json({"success": False, "error": err or "Ошибка экспорта"}, 400)
                     return
-                b64_data = base64.b64encode(buf.getvalue()).decode("utf-8")
-                self._send_json({
-                    "success": True,
-                    "filename": f"{clean_name}_TTS_Package.zip",
-                    "data": b64_data
-                })
-                return
+                zip_bytes = buf.getvalue()
+                clean_name = re.sub(r'[\\/*?:"<>|\r\n\t]', '_', clean_name).strip() or "Custom_Deck"
+                zip_filename = f"{clean_name}.zip"
             else:
                 master_buf = io.BytesIO()
                 with zipfile.ZipFile(master_buf, "w", zipfile.ZIP_DEFLATED) as master_zip:
@@ -1265,21 +1308,31 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                         d_file = d.get("filename") or d.get("file", "")
                         buf, clean_name, err = export_single_tts_deck(d_type, d_file)
                         if buf and not err:
-                            master_zip.writestr(f"{clean_name}_TTS_Package.zip", buf.getvalue())
+                            clean_name = re.sub(r'[\\/*?:"<>|\r\n\t]', '_', clean_name).strip() or "Custom_Deck"
+                            master_zip.writestr(f"{clean_name}.zip", buf.getvalue())
                             exported_count += 1
 
                 if exported_count == 0:
                     self._send_json({"success": False, "error": "Не удалось экспортировать ни одной колоды"}, 400)
                     return
 
-                b64_data = base64.b64encode(master_buf.getvalue()).decode("utf-8")
-                self._send_json({
-                    "success": True,
-                    "filename": f"TTS_Decks_Collection_{time.strftime('%Y%m%d_%H%M%S')}.zip",
-                    "data": b64_data,
-                    "count": exported_count
-                })
-                return
+                zip_bytes = master_buf.getvalue()
+                zip_filename = f"TTS_Decks_Collection_{time.strftime('%Y%m%d_%H%M%S')}.zip"
+
+            filename_enc = urllib.parse.quote(zip_filename, encoding="utf-8")
+            ascii_fallback = re.sub(r'[^\x20-\x7E]', '_', zip_filename).replace('"', '')
+            if not ascii_fallback.endswith(".zip"):
+                ascii_fallback = "decks.zip"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/zip")
+            self.send_header("Content-Disposition", f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{filename_enc}')
+            self.send_header("Content-Length", str(len(zip_bytes)))
+            self.send_header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length")
+            self.end_headers()
+            CHUNK_SIZE = 128 * 1024
+            for i in range(0, len(zip_bytes), CHUNK_SIZE):
+                self.wfile.write(zip_bytes[i:i + CHUNK_SIZE])
+            return
 
         # --- ОТКРЫТИЕ ПАПКИ СОХРАНЕНИЙ TTS ---
         if url_path == "/api/open-tts-folder":
