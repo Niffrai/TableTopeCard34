@@ -13,6 +13,11 @@ output/
 # Local cache and history
 history.json
 
+# Logs
+logs/*.log
+logs/*.txt
+!logs/.gitkeep
+
 # Environment and secrets
 .env
 *.env

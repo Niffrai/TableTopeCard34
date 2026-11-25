@@ -1,3 +1,38 @@
+// --- СИСТЕМА ЛОГИРОВАНИЯ ОШИБОК В ПАПКУ LOGS ---
+let lastLoggedError = "";
+let lastLoggedTime = 0;
+
+function logErrorToServer(source, message, details = "", context = {}) {
+  const key = `${source}:${message}`;
+  const now = Date.now();
+  if (key === lastLoggedError && (now - lastLoggedTime) < 4000) {
+    return;
+  }
+  lastLoggedError = key;
+  lastLoggedTime = now;
+
+  try {
+    fetch("/api/log-error", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: source || "UI",
+        message: String(message || "Неизвестная ошибка"),
+        details: String(details || ""),
+        context: context || {}
+      })
+    }).catch(() => {});
+  } catch (err) {}
+}
+
+window.addEventListener("error", (e) => {
+  logErrorToServer("Браузерная ошибка JS", e.message, `${e.filename}:${e.lineno}:${e.colno}\n${e.error ? e.error.stack : ''}`);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  logErrorToServer("Необработанный Promise", e.reason ? (e.reason.message || String(e.reason)) : "Unknown promise error", e.reason ? e.reason.stack : "");
+});
+
 // --- ГЛОБАЛЬНАЯ СИСТЕМА УВЕДОМЛЕНИЙ (TOAST NOTIFICATIONS) ---
 function escapeHtml(str) {
   if (!str) return "";
@@ -23,6 +58,7 @@ function showToast(message, type = "info", title = "", duration = 5000) {
   if (type === "error") {
     iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
     if (!title) title = "Ошибка";
+    logErrorToServer("Всплывающее окно (Toast)", message, `Заголовок: ${title}`);
   } else if (type === "success") {
     iconSvg = `<svg class="toast-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>`;
     if (!title) title = "Успешно";
@@ -901,6 +937,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const btnOpenLogs = document.getElementById("btn-open-logs");
+  if (btnOpenLogs) {
+    btnOpenLogs.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenLogs, "/api/open-logs-folder");
+    });
+  }
+
+  const btnOpenLogsFromBox = document.getElementById("btn-open-logs-from-box");
+  if (btnOpenLogsFromBox) {
+    btnOpenLogsFromBox.addEventListener("click", () => {
+      handleOpenFolderAction(btnOpenLogsFromBox, "/api/open-logs-folder");
+    });
+  }
+
   if (btnOpenResFolder) {
     btnOpenResFolder.addEventListener("click", () => {
       handleOpenFolderAction(btnOpenResFolder, "/api/open-res-folder");
@@ -1446,6 +1496,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (lastReportedError !== state.error) {
               lastReportedError = state.error;
+              logErrorToServer("Окно ошибки генерации", state.error, "Генерация завершилась с ошибкой", { percent: state.percent });
               showToast(state.error, "error", "Ошибка генерации", 8000);
             }
           }

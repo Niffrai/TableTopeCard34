@@ -31,9 +31,80 @@ PORT = 5000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
 
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+
+def write_error_log(source: str, message: str, details: str = "", context: dict = None) -> str:
+    """Сохраняет подробный структурированный отчёт об ошибке в папку logs."""
+    try:
+        os.makedirs(LOGS_DIR, exist_ok=True)
+        timestamp_file = time.strftime("%Y-%m-%d_%H-%M-%S")
+        timestamp_log = time.strftime("%Y-%m-%d %H:%M:%S")
+        safe_source = re.sub(r'[\\/*?:"<>| ]', '_', str(source or "Error"))[:30]
+        filename = f"error_{timestamp_file}_{safe_source}.log"
+        filepath = os.path.join(LOGS_DIR, filename)
+
+        ctx_str = ""
+        if context:
+            try:
+                safe_ctx = {}
+                for k, v in context.items():
+                    if isinstance(v, str) and len(v) > 500:
+                        safe_ctx[k] = f"{v[:100]}... [truncated {len(v)} chars]"
+                    else:
+                        safe_ctx[k] = v
+                ctx_str = json.dumps(safe_ctx, ensure_ascii=False, indent=2)
+            except Exception:
+                ctx_str = str(context)
+
+        content = (
+            f"================================================================================\n"
+            f"TableTopCard34 Error Log\n"
+            f"Time: {timestamp_log}\n"
+            f"Source: {source}\n"
+            f"Error Message: {message}\n"
+            f"--------------------------------------------------------------------------------\n"
+        )
+        if details:
+            content += f"Details / Stack Trace:\n{details.strip()}\n--------------------------------------------------------------------------------\n"
+        if ctx_str:
+            content += f"Context:\n{ctx_str}\n--------------------------------------------------------------------------------\n"
+
+        content += (
+            f"Environment:\n"
+            f"  OS: {sys.platform} ({os.name})\n"
+            f"  Python: {sys.version}\n"
+            f"  Working Directory: {os.getcwd()}\n"
+            f"================================================================================\n"
+        )
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Дописываем также в общий журнал logs/app_errors.log
+        main_log = os.path.join(LOGS_DIR, "app_errors.log")
+        with open(main_log, "a", encoding="utf-8") as f:
+            f.write(content + "\n")
+
+        # Ротация: оставляем максимум 50 последних файлов логов
+        try:
+            log_files = sorted(
+                [os.path.join(LOGS_DIR, f) for f in os.listdir(LOGS_DIR) if f.startswith("error_") and f.endswith(".log")],
+                key=os.path.getmtime
+            )
+            while len(log_files) > 50:
+                os.remove(log_files.pop(0))
+        except Exception:
+            pass
+
+        return filename
+    except Exception as e:
+        print(f"[WARN] Failed to write error log: {e}", file=sys.stderr)
+        return ""
 
 # Глобальное состояние генерации
 app_state = {
@@ -223,11 +294,13 @@ def generation_worker(params: dict):
             app_state["error"] = res.get("error", "Произошла неизвестная ошибка")
             app_state["status_message"] = f"Ошибка: {app_state['error']}"
             append_log(f"Ошибка: {app_state['error']}")
+            write_error_log("Генерация колоды", app_state["error"], res.get("details", ""), context=payload)
 
     except Exception as exc:
         app_state["error"] = str(exc)
         app_state["status_message"] = f"Ошибка генерации: {exc}"
         append_log(f"Критическая ошибка: {exc}")
+        write_error_log("Генерация (Исключение)", str(exc), traceback.format_exc(), context=payload)
     finally:
         app_state["is_running"] = False
 
@@ -1156,11 +1229,13 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             return
         tb = traceback.format_exc()
         print(f"[ERROR] Uncaught exception in request handler:\n{tb}", file=sys.stderr)
+        log_fn = write_error_log("Сервер HTTP (Uncaught)", str(exc), tb)
         try:
             self._send_json({
                 "success": False,
                 "error": f"Внутренняя ошибка сервера: {exc}",
-                "traceback": tb
+                "traceback": tb,
+                "log_file": log_fn
             }, 500)
         except Exception:
             pass
@@ -1214,6 +1289,16 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
 
         if url_path == "/api/history-stats":
             self._send_json(generator.get_history_stats())
+            return
+
+        if url_path in ("/api/open-logs-folder", "/api/open-logs"):
+            try:
+                abs_p = os.path.normpath(os.path.abspath(LOGS_DIR))
+                os.makedirs(abs_p, exist_ok=True)
+                open_folder(abs_p)
+                self._send_json({"success": True, "path": abs_p})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e), "path": LOGS_DIR}, 500)
             return
 
         if url_path == "/api/tts-decks":
@@ -1454,6 +1539,25 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": True, "path": abs_p})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e), "path": OUTPUT_DIR}, 500)
+            return
+
+        if url_path in ("/api/open-logs-folder", "/api/open-logs"):
+            try:
+                abs_p = os.path.normpath(os.path.abspath(LOGS_DIR))
+                os.makedirs(abs_p, exist_ok=True)
+                open_folder(abs_p)
+                self._send_json({"success": True, "path": abs_p})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e), "path": LOGS_DIR}, 500)
+            return
+
+        if url_path == "/api/log-error":
+            source = payload.get("source", "UI")
+            message = payload.get("message", "Неизвестная ошибка")
+            details = payload.get("details") or payload.get("stack", "")
+            context = payload.get("context", {})
+            log_fn = write_error_log(source, message, details, context)
+            self._send_json({"success": True, "log_file": log_fn, "logs_dir": LOGS_DIR})
             return
 
         if url_path == "/api/open-project-folder":

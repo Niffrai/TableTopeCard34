@@ -43,6 +43,7 @@
         <input type="file" id="friend-zip-input" accept=".zip" class="hidden">
         <button id="btn-import-zip" class="btn btn-secondary btn-sm" title="Импортировать ZIP-архив с колодой от друга">Импорт архива</button>
         <button id="btn-show-guide" class="btn btn-secondary btn-sm" title="Инструкция: как передать колоду другу">Справка</button>
+        <button id="btn-open-logs" class="btn btn-secondary btn-sm" title="Открыть папку с сохраненными логами ошибок">Логи</button>
         <button id="btn-open-folder" class="btn btn-secondary btn-sm" title="Открыть папку с файлами проекта">Папка проекта</button>
       </div>
     </header>
@@ -380,6 +381,12 @@
               <div class="error-info">
                 <h3>Произошла ошибка при генерации</h3>
                 <p id="error-message">Текст ошибки...</p>
+                <div class="error-actions" style="margin-top: 10px;">
+                  <button type="button" id="btn-open-logs-from-box" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                    📁 Папка с логами
+                  </button>
+                </div>
               </div>
               <button type="button" id="btn-dismiss-error" class="error-dismiss-btn" title="Закрыть">&times;</button>
             </div>
